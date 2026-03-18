@@ -16,6 +16,8 @@ import {
   useUsers,
   useUser,
   useUserScorecard,
+  useMyTasks,
+  useUpdateMe,
   useUpdateUserRole,
   useProjects,
   useProjectsWithStats,
@@ -145,6 +147,9 @@ function makeUtils(qc: ReturnType<typeof useQueryClient>) {
       get: { invalidate: () => qc.invalidateQueries({ queryKey: QK.strategicOrganizer }) },
       listVersions: { invalidate: () => qc.invalidateQueries({ queryKey: QK.strategicOrganizerVersions }) },
     },
+    users: {
+      myTasks: { invalidate: () => qc.invalidateQueries({ queryKey: QK.myTasks }) },
+    },
     announcements: {
       list: { invalidate: () => qc.invalidateQueries({ queryKey: QK.announcements }) },
     },
@@ -210,8 +215,9 @@ export const trpc = {
   users: {
     list: { useQuery: () => useUsers() },
     getById: { useQuery: ({ id }: { id: number }) => useUser(id) },
+    updateMe: { useMutation: (opts?: object) => withOpts(useUpdateMe(), opts) },
     updateRole: { useMutation: (opts?: object) => withOpts(useUpdateUserRole(), opts) },
-    myTasks: { useQuery: () => ({ data: undefined, isLoading: false }) },
+    myTasks: { useQuery: () => useMyTasks() },
     scorecard: { useQuery: ({ userId }: { userId: number }) => useUserScorecard(userId) },
   },
 

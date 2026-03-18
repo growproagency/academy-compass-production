@@ -17,11 +17,13 @@ import StrategicOrganizer from "./pages/StrategicOrganizer";
 import StrategicOrganizerPreview from "./pages/StrategicOrganizerPreview";
 import Announcements from "./pages/Announcements";
 import MemberScorecard from "./pages/MemberScorecard";
+import AuthCallback from "./pages/AuthCallback";
 import { CommandPalette } from "./components/CommandPalette";
 
 function Router() {
   return (
     <Switch>
+      <Route path="/auth/callback" component={AuthCallback} />
       <Route path="/strategic-organizer/preview" component={StrategicOrganizerPreview} />
       <Route>
         <DashboardLayout>

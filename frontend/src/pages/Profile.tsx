@@ -21,15 +21,26 @@ import {
   Circle,
   FolderKanban,
   Loader2,
+  Pencil,
   Shield,
   Timer,
   User,
+  X,
+  Check,
 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { useLocation } from "wouter";
 
 export default function Profile() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState("");
+  const updateMe = trpc.users.updateMe.useMutation({
+    onSuccess: () => { toast.success("Name updated"); setEditingName(false); },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   const { data: myTasks, isLoading: tasksLoading } = trpc.users.myTasks.useQuery();
   const { data: projects, isLoading: projectsLoading } = trpc.projects.list.useQuery();
@@ -68,7 +79,36 @@ export default function Profile() {
             </Avatar>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-2xl font-bold">{user?.name || "User"}</h1>
+                {editingName ? (
+                  <form
+                    className="flex items-center gap-2"
+                    onSubmit={(e) => { e.preventDefault(); if (nameValue.trim()) updateMe.mutate(nameValue.trim()); }}
+                  >
+                    <input
+                      autoFocus
+                      className="text-2xl font-bold bg-transparent border-b-2 border-primary outline-none w-48"
+                      value={nameValue}
+                      onChange={(e) => setNameValue(e.target.value)}
+                    />
+                    <button type="submit" disabled={updateMe.isPending} className="text-primary hover:text-primary/80">
+                      <Check className="h-5 w-5" />
+                    </button>
+                    <button type="button" onClick={() => setEditingName(false)} className="text-muted-foreground hover:text-foreground">
+                      <X className="h-5 w-5" />
+                    </button>
+                  </form>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-2xl font-bold">{user?.name || "User"}</h1>
+                    <button
+                      onClick={() => { setNameValue(user?.name ?? ""); setEditingName(true); }}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      title="Edit name"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
                 {user?.role === "admin" && (
                   <Badge className="gap-1 bg-primary/15 text-primary border-primary/30">
                     <Shield className="h-3 w-3" />

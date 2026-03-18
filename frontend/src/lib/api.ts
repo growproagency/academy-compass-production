@@ -16,7 +16,10 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE}${path}`;
+
+  // const url = `${API_BASE}/api${path}`; for testing
+  const url = `${API_BASE}${path}`; // production
+
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
   const res = await fetch(url, {
@@ -80,6 +83,7 @@ export const api = {
     getById: (id: number) => get(`/users/${id}`),
     updateRole: (id: number, role: "user" | "admin") =>
       patch(`/users/${id}/role`, { role }),
+    updateMe: (name: string) => patch("/users/me", { name }),
     myTasks: () => get("/users/me/tasks"),
     scorecard: (userId: number) => get(`/users/${userId}/scorecard`),
   },

@@ -824,28 +824,24 @@ export default function Calendar() {
   const { data: rawTasks = [], isLoading: tasksLoading } = trpc.tasks.listForCalendar.useQuery();
   const { data: rawMilestones = [], isLoading: milestonesLoading } =
     trpc.milestones.listForCalendar.useQuery();
-  const { data: projects = [] } = trpc.projects.list.useQuery();
-  const { data: users = [] } = trpc.users.list.useQuery();
-  const projectMap = useMemo(() => new Map((projects as { id: number; name: string }[]).map((p) => [p.id, p.name])), [projects]);
-  const userMap = useMemo(() => new Map((users as { id: number; name?: string | null }[]).map((u) => [u.id, u.name ?? null])), [users]);
+  // Use the already-prefetched listWithStats data for the Rock filter dropdown
+  const { data: projects = [] } = trpc.projects.listWithStats.useQuery();
 
   const isLoading = tasksLoading || milestonesLoading;
 
-  // Merge tasks and milestones into a unified event list
+  // Merge tasks and milestones into a unified event list.
+  // projectName and assigneeName are now returned inline by the backend.
   const allEvents = useMemo<CalEvent[]>(() => {
-    const todoEvents: CalTask[] = rawTasks.map((t) => ({
+    const todoEvents: CalTask[] = (rawTasks as any[]).map((t) => ({
       ...t,
-      projectName: t.projectId ? (projectMap.get(t.projectId) ?? "Unknown Rock") : "No Rock",
-      assigneeName: t.assigneeId ? (userMap.get(t.assigneeId) ?? null) : null,
       kind: "todo" as const,
     }));
-    const milestoneEvents: CalMilestone[] = rawMilestones.map((m) => ({
+    const milestoneEvents: CalMilestone[] = (rawMilestones as any[]).map((m) => ({
       ...m,
-      projectName: m.projectId ? (projectMap.get(m.projectId) ?? "Unknown Rock") : "No Rock",
       kind: "milestone" as const,
     }));
     return [...todoEvents, ...milestoneEvents];
-  }, [rawTasks, rawMilestones, projectMap, userMap]);
+  }, [rawTasks, rawMilestones]);
 
   const filteredEvents = useMemo(() => {
     return allEvents.filter(

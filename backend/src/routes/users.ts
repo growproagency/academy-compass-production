@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireAuth, requireAdmin } from "../middleware/auth";
-import { getAllUsers, getUserById, updateUserRole, getUserScorecard, listAllTasks } from "../db";
+import { getAllUsers, getUserById, updateUserRole, updateUserProfile, getUserScorecard, listAllTasks } from "../db";
 
 const router = Router();
 
@@ -9,6 +9,21 @@ router.get("/", requireAuth, async (req, res) => {
   try {
     const users = await getAllUsers();
     res.json(users);
+  } catch (e: any) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
+// PATCH /api/users/me
+router.patch("/me", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const { name } = req.body;
+  if (!name || typeof name !== "string" || !name.trim()) {
+    return res.status(400).json({ message: "Name is required" });
+  }
+  try {
+    const updated = await updateUserProfile(user.id, name.trim());
+    res.json(updated);
   } catch (e: any) {
     res.status(500).json({ message: e.message });
   }

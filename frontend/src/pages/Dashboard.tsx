@@ -143,45 +143,57 @@ export default function Dashboard() {
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
 
   const utils = trpc.useUtils();
-  const { data: stats, isLoading: statsLoading } = trpc.dashboard.stats.useQuery();
-  const { data: allTasks, isLoading: tasksLoading } = trpc.tasks.listAll.useQuery();
-  const { data: projects } = trpc.projects.list.useQuery();
-  const { data: rocksWithStats, isLoading: rocksLoading } = trpc.projects.listWithStats.useQuery();
-  const { data: healthTrend } = trpc.projects.healthTrend.useQuery();
-  const { data: users } = trpc.users.list.useQuery();
+  const { data: _allTasks, isLoading: tasksLoading } = trpc.tasks.listAll.useQuery();
+  const { data: _rocksWithStats, isLoading: rocksLoading } = trpc.projects.listWithStats.useQuery();
+  const { data: _healthTrend } = trpc.projects.healthTrend.useQuery();
+  const { data: _users } = trpc.users.list.useQuery();
+
+  // Cast from unknown (trpc shim types) to typed arrays
+  const allTasks = _allTasks as any[] | undefined;
+  const rocksWithStats = _rocksWithStats as any[] | undefined;
+  const healthTrend = _healthTrend as any[] | undefined;
+  const users = _users as any[] | undefined;
 
   const updateTask = trpc.tasks.update.useMutation({
     onSuccess: () => {
       utils.tasks.listAll.invalidate();
-      utils.dashboard.stats.invalidate();
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err: any) => toast.error(err.message),
   });
 
   const reorderTask = trpc.tasks.reorder.useMutation({
     onSuccess: () => utils.tasks.listAll.invalidate(),
-    onError: (err) => toast.error(err.message),
+    onError: (err: any) => toast.error(err.message),
   });
 
   const bulkDeleteMutation = trpc.tasks.bulkDelete.useMutation({
-    onSuccess: (res) => {
+    onSuccess: (res: any) => {
       utils.tasks.listAll.invalidate();
-      utils.dashboard.stats.invalidate();
       const msg = res.forbidden > 0
         ? `Archived ${res.deleted} To-Do${res.deleted !== 1 ? "s" : ""} (${res.forbidden} skipped — no permission).`
         : `Archived ${res.deleted} To-Do${res.deleted !== 1 ? "s" : ""}.`;
       toast.success(msg);
       clearSelection();
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err: any) => toast.error(err.message),
   });
 
-  // Build lookup maps
-  const projectMap = new Map(projects?.map((p) => [p.id, p.name]) ?? []);
-  const userMap = new Map(users?.map((u) => [u.id, u.name]) ?? []);
+  // Build lookup maps — reuse rocksWithStats (already prefetched) instead of a separate projects.list fetch
+  const projectMap = new Map((rocksWithStats ?? []).map((p: any) => [p.id, p.name]));
+  const userMap = new Map((users ?? []).map((u: any) => [u.id, u.name]));
+
+  // Derive stats locally from allTasks — no extra round-trip needed
+  const now = Date.now();
+  const stats = allTasks ? {
+    totalTasks: allTasks.length,
+    doneTasks: allTasks.filter((t: any) => t.status === "done").length,
+    inProgressTasks: allTasks.filter((t: any) => t.status === "in_progress").length,
+    overdueTasks: allTasks.filter((t: any) => t.status !== "done" && t.dueDate && t.dueDate < now).length,
+    totalProjects: rocksWithStats?.length ?? 0,
+  } : null;
 
   // Filter & sort tasks
-  const filteredTasks = (allTasks ?? []).filter((t) => {
+  const filteredTasks = (allTasks ?? []).filter((t: any) => {
     if (filterProject !== "all" && t.projectId !== parseInt(filterProject)) return false;
     if (filterPriority !== "all" && t.priority !== filterPriority) return false;
     return true;
@@ -302,7 +314,7 @@ export default function Dashboard() {
     }
   }
 
-  const isLoading = statsLoading || tasksLoading;
+  const isLoading = tasksLoading;
 
   // ── Date range boundaries ─────────────────────────────────────────────────
   const dateRangeBounds = useMemo(() => {
@@ -839,7 +851,7 @@ export default function Dashboard() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Rocks</SelectItem>
-                {projects?.map((p) => (
+                {(rocksWithStats ?? []).map((p: any) => (
                   <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -1079,7 +1091,7 @@ export default function Dashboard() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
                 setBulkDeleteConfirmOpen(false);
-                bulkDeleteMutation.mutate({ ids: Array.from(selectedIds) });
+                bulkDeleteMutation.mutate(Array.from(selectedIds));
               }}
             >
               <Trash2 className="h-4 w-4 mr-1.5" />

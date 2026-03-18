@@ -199,6 +199,17 @@ export async function updateUserRole(id: number, role: "user" | "admin"): Promis
   await supabase.from("users").update({ role, updatedAt: new Date().toISOString() }).eq("id", id);
 }
 
+export async function updateUserProfile(id: number, name: string): Promise<User | null> {
+  const { data } = await supabase
+    .from("users")
+    .update({ name, updatedAt: new Date().toISOString() })
+    .eq("id", id)
+    .select()
+    .single();
+  if (!data) return null;
+  return mapUser(data as Record<string, unknown>);
+}
+
 // ─── Projects ─────────────────────────────────────────────────────────────────
 
 export async function getProjectById(id: number): Promise<Project | null> {
@@ -632,34 +643,59 @@ async function _enrichTasksWithAssigneeAndProject(taskRows: Task[]) {
 
 // ─── Calendar ─────────────────────────────────────────────────────────────────
 
-export async function getTasksForCalendar(userId: number, isAdmin: boolean): Promise<Task[]> {
+export async function getTasksForCalendar(
+  userId: number,
+  isAdmin: boolean,
+): Promise<Array<Task & { projectName: string; assigneeName: string | null }>> {
+  let taskRows: Task[];
   if (isAdmin) {
     const { data } = await supabase.from("tasks").select("*").is("archivedAt", null).not("dueDate", "is", null);
-    return (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
+    taskRows = (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
+  } else {
+    const { data } = await supabase
+      .from("tasks")
+      .select("*")
+      .is("archivedAt", null)
+      .not("dueDate", "is", null)
+      .or(`creatorId.eq.${userId},assigneeId.eq.${userId}`);
+    taskRows = (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
   }
-  const { data } = await supabase
-    .from("tasks")
-    .select("*")
-    .is("archivedAt", null)
-    .not("dueDate", "is", null)
-    .or(`creatorId.eq.${userId},assigneeId.eq.${userId}`);
-  return (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
+  if (taskRows.length === 0) return [];
+
+  const projectIds = [...new Set(taskRows.filter((t) => t.projectId).map((t) => t.projectId as number))];
+  const assigneeIds = [...new Set(taskRows.filter((t) => t.assigneeId).map((t) => t.assigneeId as number))];
+
+  const [projectRes, userRes] = await Promise.all([
+    projectIds.length ? supabase.from("projects").select("id, name").in("id", projectIds) : Promise.resolve({ data: [] }),
+    assigneeIds.length ? supabase.from("users").select("id, name").in("id", assigneeIds) : Promise.resolve({ data: [] }),
+  ]);
+
+  const projectNameMap = new Map((projectRes.data ?? []).map((p: any) => [p.id as number, p.name as string]));
+  const userNameMap = new Map((userRes.data ?? []).map((u: any) => [u.id as number, u.name as string | null]));
+
+  return taskRows.map((t) => ({
+    ...t,
+    projectName: t.projectId ? (projectNameMap.get(t.projectId) ?? "Unknown Rock") : "No Rock",
+    assigneeName: t.assigneeId ? (userNameMap.get(t.assigneeId) ?? null) : null,
+  }));
 }
 
 export async function getMilestonesForCalendar(userId: number, isAdmin: boolean): Promise<Array<Milestone & { projectName: string }>> {
+  let projectNameMap: Map<number, string>;
   let projectIds: number[];
   if (isAdmin) {
-    const { data } = await supabase.from("projects").select("id");
-    projectIds = (data ?? []).map((r: Record<string, unknown>) => r.id as number);
+    const { data } = await supabase.from("projects").select("id, name");
+    const rows = (data ?? []) as Array<Record<string, unknown>>;
+    projectIds = rows.map((r) => r.id as number);
+    projectNameMap = new Map(rows.map((r) => [r.id as number, r.name as string]));
   } else {
     const projects = await listProjectsForUser(userId);
     projectIds = projects.map((p) => p.id);
+    projectNameMap = new Map(projects.map((p) => [p.id, p.name]));
   }
   if (projectIds.length === 0) return [];
   const { data: milestoneRows } = await supabase.from("milestones").select("*").in("projectId", projectIds).not("dueDate", "is", null);
   if (!milestoneRows || milestoneRows.length === 0) return [];
-  const { data: projectRows } = await supabase.from("projects").select("id, name").in("id", projectIds);
-  const projectNameMap = new Map((projectRows ?? []).map((p: Record<string, unknown>) => [p.id as number, p.name as string]));
   return (milestoneRows as Array<Record<string, unknown>>).map((m) => ({
     ...mapMilestone(m),
     projectName: projectNameMap.get(m.projectId as number) ?? "Unknown Rock",

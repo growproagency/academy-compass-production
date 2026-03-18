@@ -44,6 +44,7 @@ export const QK = {
   reminderWindow: ["notifications", "reminderWindow"] as const,
   dueSoonCount: ["notifications", "dueSoonCount"] as const,
   previewDigest: ["notifications", "previewDigest"] as const,
+  myTasks: ["users", "me", "tasks"] as const,
 };
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -67,6 +68,21 @@ export function useUser(id: number) {
 
 export function useUserScorecard(userId: number) {
   return useQuery({ queryKey: QK.userScorecard(userId), queryFn: () => api.users.scorecard(userId), enabled: !!userId });
+}
+
+export function useMyTasks() {
+  return useQuery({ queryKey: QK.myTasks, queryFn: () => api.users.myTasks() });
+}
+
+export function useUpdateMe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api.users.updateMe(name),
+    onSuccess: (updated: any) => {
+      qc.setQueryData(QK.me, updated);
+      qc.invalidateQueries({ queryKey: QK.users });
+    },
+  });
 }
 
 export function useUpdateUserRole() {
@@ -228,23 +244,27 @@ export function useUpdateTask() {
   return useMutation({
     mutationFn: ({ id, ...data }: { id: number; [k: string]: unknown }) => api.tasks.update(id, data),
     onMutate: async ({ id, ...updates }) => {
-      // Cancel any outgoing refetches so they don't overwrite the optimistic update
       await qc.cancelQueries({ queryKey: QK.tasks });
+      await qc.cancelQueries({ queryKey: QK.myTasks });
       const prev = qc.getQueryData(QK.tasks);
-      // Immediately apply the change so the UI (kanban columns, status toggle) updates at once
+      const prevMy = qc.getQueryData(QK.myTasks);
+      const patch = (old: any) =>
+        Array.isArray(old) ? old.map((t) => (t.id === id ? { ...t, ...updates } : t)) : old;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      qc.setQueryData(QK.tasks, (old: any) =>
-        Array.isArray(old) ? old.map((t) => (t.id === id ? { ...t, ...updates } : t)) : old
-      );
-      return { prev };
+      qc.setQueryData(QK.tasks, patch as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      qc.setQueryData(QK.myTasks, patch as any);
+      return { prev, prevMy };
     },
     onError: (_e, _v, ctx) => {
-      // Roll back on failure
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if (ctx?.prev) qc.setQueryData(QK.tasks, ctx.prev as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (ctx?.prevMy) qc.setQueryData(QK.myTasks, ctx.prevMy as any);
     },
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: QK.tasks });
+      qc.invalidateQueries({ queryKey: QK.myTasks });
       qc.invalidateQueries({ queryKey: QK.task(v.id) });
       qc.invalidateQueries({ queryKey: QK.dashboardStats });
     },
