@@ -18,15 +18,12 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       return next();
     }
 
-    // Upsert user into our DB.
-    // Only pass `name` on first creation — do NOT overwrite a user-set name on
-    // subsequent logins (Supabase metadata is null for email/password accounts).
     const existingUser = await getUserByOpenId(supabaseUser.id);
     await upsertUser({
       openId: supabaseUser.id,
       email: supabaseUser.email ?? null,
       name: existingUser
-        ? undefined  // preserve the existing name in the DB
+        ? undefined
         : (supabaseUser.user_metadata?.full_name ?? supabaseUser.user_metadata?.name ?? null),
       loginMethod: supabaseUser.app_metadata?.provider ?? null,
       lastSignedIn: new Date(),
@@ -53,5 +50,17 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const user = (req as any).user;
   if (!user) return res.status(401).json({ message: "Unauthorized" });
   if (user.role !== "admin") return res.status(403).json({ message: "Admin access required" });
+  next();
+}
+
+export function requireActive(req: Request, res: Response, next: NextFunction) {
+  const user = (req as any).user;
+  if (!user) return res.status(401).json({ message: "Unauthorized" });
+  if (user.status !== "active") {
+    return res.status(403).json({
+      message: "Account pending approval",
+      code: "PENDING",
+    });
+  }
   next();
 }

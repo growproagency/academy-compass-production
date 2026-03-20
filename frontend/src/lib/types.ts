@@ -1,6 +1,5 @@
-// Shared types for the Academy Compass app
-
 export type UserRole = "user" | "admin";
+export type UserStatus = "pending" | "active" | "suspended";
 export type RockStatus = "on_track" | "off_track" | "assist" | "complete";
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "low" | "medium" | "high";
@@ -13,6 +12,8 @@ export interface User {
   email: string | null;
   loginMethod: string | null;
   role: UserRole;
+  status: UserStatus;
+  approved_at: string | null;
   createdAt: string;
   updatedAt: string;
   lastSignedIn: string;

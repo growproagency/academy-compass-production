@@ -73,7 +73,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
   });
-  const { loading, user } = useAuth();
+  const { loading, user, logout } = useAuth();
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
@@ -81,11 +81,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (loading) return <DashboardLayoutSkeleton />;
 
+  if (!loading && user && user.status === "pending") {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex flex-col items-center gap-6 p-8 max-w-sm w-full text-center">
+          <div className="w-16 h-16 rounded-2xl overflow-hidden border border-primary/20 flex items-center justify-center bg-primary/5">
+            <img src={LOGO_URL} alt="Academy Compass" className="w-full h-full object-contain" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <h1 className="text-2xl font-extrabold gradient-text tracking-tight">
+              Account Pending Approval
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Your account has been created successfully. Our team will review
+              and activate your access shortly.
+            </p>
+          </div>
+          <div className="w-full rounded-xl border border-border bg-card shadow-sm p-4 text-sm text-muted-foreground">
+            Once approved, you'll be able to log in and access your dashboard.
+          </div>
+          <button
+            onClick={logout}
+            className="text-xs text-primary hover:underline"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-8 p-8 max-w-sm w-full">
-          {/* Logo */}
           <div className="flex flex-col items-center gap-4">
             <div className="w-16 h-16 rounded-2xl overflow-hidden border border-primary/20 flex items-center justify-center glow-primary bg-primary/5">
               <img src={LOGO_URL} alt="Academy Compass" className="w-full h-full object-contain" />
@@ -169,7 +198,6 @@ function DashboardLayoutContent({
     };
   }, [isResizing, setSidebarWidth]);
 
-  // Prefetch data for tabs so it's already cached when the user navigates to them
   trpc.projects.listWithStats.useQuery();
   trpc.tasks.listAll.useQuery();
   trpc.tasks.listForCalendar.useQuery();
@@ -178,13 +206,11 @@ function DashboardLayoutContent({
   trpc.users.list.useQuery();
   trpc.announcements.list.useQuery();
 
-  // Overdue count badge for My Tasks — derived from the myTasks cache so it
-  // updates immediately when a task is toggled (optimistic update).
   const { data: myTasks } = trpc.users.myTasks.useQuery();
   const now = Date.now();
-  const overdueCount = (myTasks ?? []).filter(
-    (t: any) => t.dueDate && t.dueDate < now && t.status !== "done"
-  ).length;
+const overdueCount = ((myTasks ?? []) as any[]).filter(
+  (t) => t.dueDate && t.dueDate < now && t.status !== "done"
+).length;
 
   const NavItem = ({ item }: { item: typeof menuItems[0] }) => {
     const isActive = item.path === "/" ? location === "/" : location.startsWith(item.path);
@@ -217,7 +243,6 @@ function DashboardLayoutContent({
     <>
       <div className="relative" ref={sidebarRef}>
         <Sidebar collapsible="icon" className="border-r border-border" disableTransition={isResizing}>
-          {/* Header */}
           <SidebarHeader className="h-16 justify-center border-b border-border">
             <div className="flex items-center gap-3 px-2 w-full">
               <button
@@ -251,7 +276,6 @@ function DashboardLayoutContent({
             </div>
           </SidebarHeader>
 
-          {/* Navigation */}
           <SidebarContent className="gap-0 py-3">
             <SidebarMenu className="px-2 gap-0.5">
               {menuItems.map((item) => <NavItem key={item.path} item={item} />)}
@@ -273,7 +297,6 @@ function DashboardLayoutContent({
             )}
           </SidebarContent>
 
-          {/* Footer */}
           <SidebarFooter className="p-3 border-t border-border">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -320,7 +343,6 @@ function DashboardLayoutContent({
           </SidebarFooter>
         </Sidebar>
 
-        {/* Resize handle */}
         <div
           className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
           onMouseDown={() => { if (!isCollapsed) setIsResizing(true); }}
@@ -408,7 +430,6 @@ function EmailAuthForm() {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Google OAuth */}
       <Button
         type="button"
         variant="outline"
@@ -425,7 +446,6 @@ function EmailAuthForm() {
         Continue with Google
       </Button>
 
-      {/* Divider */}
       <div className="flex items-center gap-2">
         <div className="flex-1 h-px bg-border" />
         <span className="text-xs text-muted-foreground">or</span>
