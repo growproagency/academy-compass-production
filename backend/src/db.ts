@@ -38,6 +38,8 @@ function mapUser(row: Record<string, unknown>): User {
     email: (row.email as string) ?? null,
     loginMethod: (row.loginMethod as string) ?? null,
     role: (row.role as "user" | "admin") ?? "user",
+    status: (row.status as "pending" | "active" | "suspended") ?? "pending",
+    approved_at: (row.approved_at as string) ?? null,
     createdAt: toDate(row.createdAt as string),
     updatedAt: toDate(row.updatedAt as string),
     lastSignedIn: toDate(row.lastSignedIn as string),
