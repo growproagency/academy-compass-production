@@ -20,3 +20,4 @@ Thumbs.db
 .claude
 
 supabase_schema.sql
+*.sql
