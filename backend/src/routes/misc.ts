@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireAuth, requireAdmin } from "../middleware/auth";
+import { requireOrg } from "../middleware/org";
 import {
   getSubtaskById, toggleSubtask, deleteSubtask,
   getCommentById, deleteComment,
@@ -53,10 +54,11 @@ commentsRouter.delete("/:id", requireAuth, async (req, res) => {
 export const milestonesRouter = Router();
 
 // GET /api/milestones
-milestonesRouter.get("/", requireAuth, async (req, res) => {
+milestonesRouter.get("/", requireAuth, requireOrg, async (req, res) => {
   const user = (req as any).user;
+  const org = (req as any).org;
   if (req.query.calendar === "true") {
-    return res.json(await getMilestonesForCalendar(user.id, user.role === "admin"));
+    return res.json(await getMilestonesForCalendar(user.id, user.role === "admin", org.id));
   }
   res.json([]);
 });
@@ -107,51 +109,54 @@ milestonesRouter.delete("/:id", requireAuth, async (req, res) => {
 // ────────────────────────────────────────────────────────────────────────────
 export const dashboardRouter = Router();
 
-dashboardRouter.get("/stats", requireAuth, async (req, res) => {
+dashboardRouter.get("/stats", requireAuth, requireOrg, async (req, res) => {
   const user = (req as any).user;
+  const org = (req as any).org;
   try {
-    res.json(await getDashboardStats(user.id, user.role === "admin"));
+    res.json(await getDashboardStats(user.id, user.role === "admin", org.id));
   } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
 // ────────────────────────────────────────────────────────────────────────────
 export const strategicOrganizerRouter = Router();
 
-strategicOrganizerRouter.get("/versions", requireAuth, async (req, res) => {
-  const user = (req as any).user;
-  res.json(await listStrategicOrganizerVersions(user.id));
+strategicOrganizerRouter.get("/versions", requireAuth, requireOrg, async (req, res) => {
+  const org = (req as any).org;
+  res.json(await listStrategicOrganizerVersions(org.id));
 });
 
-strategicOrganizerRouter.post("/versions/:id/restore", requireAuth, async (req, res) => {
+strategicOrganizerRouter.post("/versions/:id/restore", requireAuth, requireOrg, async (req, res) => {
   const user = (req as any).user;
+  const org = (req as any).org;
   const version = await getStrategicOrganizerVersion(Number(req.params.id));
   if (!version) return res.status(404).json({ message: "Not found" });
-  if ((version as any).ownerId !== user.id) return res.status(403).json({ message: "Forbidden" });
+  if ((version as any).organizationId !== org.id) return res.status(403).json({ message: "Forbidden" });
   const data = JSON.parse((version as any).snapshotJson);
-  await upsertStrategicOrganizer({ ...data, ownerId: user.id });
+  await upsertStrategicOrganizer({ ...data, organizationId: org.id, ownerId: user.id });
   res.json({ success: true });
 });
 
-strategicOrganizerRouter.delete("/versions/:id", requireAuth, async (req, res) => {
-  const user = (req as any).user;
+strategicOrganizerRouter.delete("/versions/:id", requireAuth, requireOrg, async (req, res) => {
+  const org = (req as any).org;
   const version = await getStrategicOrganizerVersion(Number(req.params.id));
   if (!version) return res.status(404).json({ message: "Not found" });
-  if ((version as any).ownerId !== user.id) return res.status(403).json({ message: "Forbidden" });
+  if ((version as any).organizationId !== org.id) return res.status(403).json({ message: "Forbidden" });
   await deleteStrategicOrganizerVersion(Number(req.params.id));
   res.json({ success: true });
 });
 
-strategicOrganizerRouter.get("/", requireAuth, async (req, res) => {
-  const user = (req as any).user;
-  res.json(await getStrategicOrganizer(user.id));
+strategicOrganizerRouter.get("/", requireAuth, requireOrg, async (req, res) => {
+  const org = (req as any).org;
+  res.json(await getStrategicOrganizer(org.id));
 });
 
-strategicOrganizerRouter.post("/", requireAuth, async (req, res) => {
+strategicOrganizerRouter.post("/", requireAuth, requireOrg, async (req, res) => {
   const user = (req as any).user;
+  const org = (req as any).org;
   const { saveVersion, versionLabel, ...data } = req.body;
-  await upsertStrategicOrganizer({ ...data, ownerId: user.id });
+  await upsertStrategicOrganizer({ ...data, organizationId: org.id, ownerId: user.id });
   if (saveVersion) {
-    await saveStrategicOrganizerVersion({ ownerId: user.id, snapshotJson: JSON.stringify(data), label: versionLabel });
+    await saveStrategicOrganizerVersion({ organizationId: org.id, ownerId: user.id, snapshotJson: JSON.stringify(data), label: versionLabel });
   }
   res.json({ success: true });
 });
@@ -159,14 +164,16 @@ strategicOrganizerRouter.post("/", requireAuth, async (req, res) => {
 // ────────────────────────────────────────────────────────────────────────────
 export const announcementsRouter = Router();
 
-announcementsRouter.get("/", async (_req, res) => {
-  res.json(await listAnnouncements());
+announcementsRouter.get("/", requireOrg, async (req, res) => {
+  const org = (req as any).org;
+  res.json(await listAnnouncements(org.id));
 });
 
-announcementsRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
+announcementsRouter.post("/", requireAuth, requireAdmin, requireOrg, async (req, res) => {
   const user = (req as any).user;
+  const org = (req as any).org;
   const { title, body, isPinned, expiresAt } = req.body;
-  res.status(201).json(await createAnnouncement({ title, body, isPinned: isPinned ?? false, authorId: user.id, expiresAt: expiresAt ?? null }));
+  res.status(201).json(await createAnnouncement({ organizationId: org.id, title, body, isPinned: isPinned ?? false, authorId: user.id, expiresAt: expiresAt ?? null }));
 });
 
 announcementsRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
@@ -202,44 +209,51 @@ rockCommentsRouter.delete("/:id", requireAuth, async (req, res) => {
 // ────────────────────────────────────────────────────────────────────────────
 export const notificationsRouter = Router();
 
-notificationsRouter.get("/overdue-count", requireAuth, async (_req, res) => {
-  const overdue = await getOverdueTasks();
+notificationsRouter.get("/overdue-count", requireAuth, requireOrg, async (req, res) => {
+  const org = (req as any).org;
+  const overdue = await getOverdueTasks(org.id);
   res.json({ count: (overdue as any[]).length });
 });
 
-notificationsRouter.get("/schedule", requireAuth, requireAdmin, async (_req, res) => {
-  const raw = await getSystemSetting("digest_schedule");
+notificationsRouter.get("/schedule", requireAuth, requireAdmin, requireOrg, async (req, res) => {
+  const org = (req as any).org;
+  const raw = await getSystemSetting("digest_schedule", org.id);
   if (!raw) return res.json({ hour: 8, minute: 0 });
   try { res.json(JSON.parse(raw)); } catch { res.json({ hour: 8, minute: 0 }); }
 });
 
-notificationsRouter.post("/schedule", requireAuth, requireAdmin, async (req, res) => {
+notificationsRouter.post("/schedule", requireAuth, requireAdmin, requireOrg, async (req, res) => {
+  const org = (req as any).org;
   const { hour, minute } = req.body;
-  await setSystemSetting("digest_schedule", JSON.stringify({ hour, minute }));
+  await setSystemSetting("digest_schedule", JSON.stringify({ hour, minute }), org.id);
   res.json({ success: true, hour, minute });
 });
 
-notificationsRouter.get("/reminder-window", requireAuth, requireAdmin, async (_req, res) => {
-  const raw = await getSystemSetting("reminder_window_hours");
+notificationsRouter.get("/reminder-window", requireAuth, requireAdmin, requireOrg, async (req, res) => {
+  const org = (req as any).org;
+  const raw = await getSystemSetting("reminder_window_hours", org.id);
   const hours = raw ? parseInt(raw, 10) : 24;
   res.json({ hours: isNaN(hours) ? 24 : hours });
 });
 
-notificationsRouter.post("/reminder-window", requireAuth, requireAdmin, async (req, res) => {
-  await setSystemSetting("reminder_window_hours", String(req.body.hours));
+notificationsRouter.post("/reminder-window", requireAuth, requireAdmin, requireOrg, async (req, res) => {
+  const org = (req as any).org;
+  await setSystemSetting("reminder_window_hours", String(req.body.hours), org.id);
   res.json({ success: true, hours: req.body.hours });
 });
 
-notificationsRouter.get("/due-soon-count", requireAuth, requireAdmin, async (_req, res) => {
-  const raw = await getSystemSetting("reminder_window_hours");
+notificationsRouter.get("/due-soon-count", requireAuth, requireAdmin, requireOrg, async (req, res) => {
+  const org = (req as any).org;
+  const raw = await getSystemSetting("reminder_window_hours", org.id);
   const windowHours = raw ? parseInt(raw, 10) : 24;
   const windowMs = (isNaN(windowHours) ? 24 : windowHours) * 60 * 60 * 1000;
-  const tasks = await getTasksDueSoon(windowMs);
+  const tasks = await getTasksDueSoon(windowMs, org.id);
   res.json({ count: (tasks as any[]).length, windowHours: isNaN(windowHours) ? 24 : windowHours });
 });
 
-notificationsRouter.get("/preview-digest", requireAuth, requireAdmin, async (_req, res) => {
-  const overdue = await getOverdueTasks();
+notificationsRouter.get("/preview-digest", requireAuth, requireAdmin, requireOrg, async (req, res) => {
+  const org = (req as any).org;
+  const overdue = await getOverdueTasks(org.id);
   if ((overdue as any[]).length === 0) return res.json({ count: 0, rocks: [] });
   const byProject: Record<string, any[]> = {};
   for (const row of overdue as any[]) {
@@ -262,15 +276,17 @@ notificationsRouter.post("/send-reminders", requireAuth, requireAdmin, async (_r
   res.json({ sent: 0, failed: 0 });
 });
 
-notificationsRouter.get("/weekly-report-schedule", requireAuth, requireAdmin, async (_req, res) => {
-  const raw = await getSystemSetting("weekly_report_schedule");
+notificationsRouter.get("/weekly-report-schedule", requireAuth, requireAdmin, requireOrg, async (req, res) => {
+  const org = (req as any).org;
+  const raw = await getSystemSetting("weekly_report_schedule", org.id);
   if (!raw) return res.json({ hour: 8, minute: 0 });
   try { res.json(JSON.parse(raw)); } catch { res.json({ hour: 8, minute: 0 }); }
 });
 
-notificationsRouter.post("/weekly-report-schedule", requireAuth, requireAdmin, async (req, res) => {
+notificationsRouter.post("/weekly-report-schedule", requireAuth, requireAdmin, requireOrg, async (req, res) => {
+  const org = (req as any).org;
   const { hour, minute } = req.body;
-  await setSystemSetting("weekly_report_schedule", JSON.stringify({ hour, minute }));
+  await setSystemSetting("weekly_report_schedule", JSON.stringify({ hour, minute }), org.id);
   res.json({ success: true, hour, minute });
 });
 

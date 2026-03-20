@@ -1,5 +1,7 @@
 import { supabase } from "./supabase";
 import type {
+  Organization,
+  InsertOrganization,
   User,
   InsertUser,
   Project,
@@ -30,6 +32,19 @@ function toDate(val: string | null | undefined): Date {
   return val ? new Date(val) : new Date();
 }
 
+function mapOrg(row: Record<string, unknown>): Organization {
+  return {
+    id: row.id as number,
+    name: row.name as string,
+    slug: row.slug as string,
+    brandPrimaryColor: (row.brandPrimaryColor as string) ?? null,
+    brandAccentColor: (row.brandAccentColor as string) ?? null,
+    logoUrl: (row.logoUrl as string) ?? null,
+    createdAt: toDate(row.createdAt as string),
+    updatedAt: toDate(row.updatedAt as string),
+  };
+}
+
 function mapUser(row: Record<string, unknown>): User {
   return {
     id: row.id as number,
@@ -37,7 +52,8 @@ function mapUser(row: Record<string, unknown>): User {
     name: (row.name as string) ?? null,
     email: (row.email as string) ?? null,
     loginMethod: (row.loginMethod as string) ?? null,
-    role: (row.role as "user" | "admin") ?? "user",
+    role: (row.role as User["role"]) ?? "user",
+    organizationId: (row.organizationId as number) ?? null,
     createdAt: toDate(row.createdAt as string),
     updatedAt: toDate(row.updatedAt as string),
     lastSignedIn: toDate(row.lastSignedIn as string),
@@ -50,6 +66,7 @@ function mapProject(row: Record<string, unknown>): Project {
     name: row.name as string,
     description: (row.description as string) ?? null,
     ownerId: row.ownerId as number,
+    organizationId: row.organizationId as number,
     dueDate: (row.dueDate as number) ?? null,
     rockStatus: (row.rockStatus as Project["rockStatus"]) ?? "on_track",
     createdAt: toDate(row.createdAt as string),
@@ -66,6 +83,7 @@ function mapTask(row: Record<string, unknown>): Task {
     projectId: (row.projectId as number) ?? null,
     assigneeId: (row.assigneeId as number) ?? null,
     creatorId: row.creatorId as number,
+    organizationId: row.organizationId as number,
     status: (row.status as Task["status"]) ?? "todo",
     priority: (row.priority as Task["priority"]) ?? "medium",
     dueDate: (row.dueDate as number) ?? null,
@@ -120,6 +138,7 @@ function mapMilestone(row: Record<string, unknown>): Milestone {
 function mapAnnouncement(row: Record<string, unknown>): Announcement {
   return {
     id: row.id as number,
+    organizationId: row.organizationId as number,
     title: row.title as string,
     body: row.body as string,
     isPinned: Boolean(row.isPinned),
@@ -139,6 +158,51 @@ function mapRockComment(row: Record<string, unknown>): RockComment {
     createdAt: toDate(row.createdAt as string),
     updatedAt: toDate(row.updatedAt as string),
   };
+}
+
+// ─── Organizations ────────────────────────────────────────────────────────────
+
+export async function getOrgBySlug(slug: string): Promise<Organization | null> {
+  const { data } = await supabase.from("organizations").select("*").eq("slug", slug).maybeSingle();
+  if (!data) return null;
+  return mapOrg(data as Record<string, unknown>);
+}
+
+export async function getOrgById(id: number): Promise<Organization | null> {
+  const { data } = await supabase.from("organizations").select("*").eq("id", id).maybeSingle();
+  if (!data) return null;
+  return mapOrg(data as Record<string, unknown>);
+}
+
+export async function listOrgs(): Promise<Organization[]> {
+  const { data } = await supabase.from("organizations").select("*").order("name", { ascending: true });
+  return (data ?? []).map((r: Record<string, unknown>) => mapOrg(r));
+}
+
+export async function createOrg(data: InsertOrganization): Promise<Organization | null> {
+  const now = new Date().toISOString();
+  const { data: row, error } = await supabase
+    .from("organizations")
+    .insert({ ...data, createdAt: now, updatedAt: now })
+    .select()
+    .single();
+  if (error || !row) return null;
+  return mapOrg(row as Record<string, unknown>);
+}
+
+export async function updateOrg(id: number, data: Partial<InsertOrganization>): Promise<Organization | null> {
+  const { data: row } = await supabase
+    .from("organizations")
+    .update({ ...data, updatedAt: new Date().toISOString() })
+    .eq("id", id)
+    .select()
+    .single();
+  if (!row) return null;
+  return mapOrg(row as Record<string, unknown>);
+}
+
+export async function deleteOrg(id: number): Promise<void> {
+  await supabase.from("organizations").delete().eq("id", id);
 }
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -163,6 +227,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   if (user.email !== undefined) payload.email = user.email ?? null;
   if (user.loginMethod !== undefined) payload.loginMethod = user.loginMethod ?? null;
   if (user.role !== undefined) payload.role = user.role;
+  if (user.organizationId !== undefined) payload.organizationId = user.organizationId ?? null;
   if (user.lastSignedIn !== undefined) {
     payload.lastSignedIn = user.lastSignedIn instanceof Date
       ? user.lastSignedIn.toISOString()
@@ -178,20 +243,28 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   }
 }
 
-export async function getAllUsers(): Promise<Pick<User, "id" | "name" | "email" | "role" | "openId" | "createdAt">[]> {
-  const { data } = await supabase.from("users").select("id, name, email, role, openId, createdAt").order("name", { ascending: true });
+export async function getAllUsers(orgId: number): Promise<Pick<User, "id" | "name" | "email" | "role" | "openId" | "createdAt">[]> {
+  const { data } = await supabase
+    .from("users")
+    .select("id, name, email, role, openId, createdAt")
+    .eq("organizationId", orgId)
+    .order("name", { ascending: true });
   return (data ?? []).map((r: Record<string, unknown>) => ({
     id: r.id as number,
     name: (r.name as string) ?? null,
     email: (r.email as string) ?? null,
-    role: (r.role as "user" | "admin") ?? "user",
+    role: (r.role as User["role"]) ?? "user",
     openId: r.openId as string,
     createdAt: toDate(r.createdAt as string),
   }));
 }
 
-export async function listUsers(): Promise<User[]> {
-  const { data } = await supabase.from("users").select("*").order("createdAt", { ascending: false });
+export async function listUsers(orgId: number): Promise<User[]> {
+  const { data } = await supabase
+    .from("users")
+    .select("*")
+    .eq("organizationId", orgId)
+    .order("createdAt", { ascending: false });
   return (data ?? []).map((r: Record<string, unknown>) => mapUser(r));
 }
 
@@ -243,18 +316,23 @@ export async function deleteProject(id: number): Promise<void> {
   await supabase.from("projects").delete().eq("id", id);
 }
 
-export async function listProjectsByOwner(ownerId: number): Promise<Project[]> {
-  const { data } = await supabase.from("projects").select("*").eq("ownerId", ownerId).order("createdAt", { ascending: false });
+export async function listProjectsByOwner(ownerId: number, orgId: number): Promise<Project[]> {
+  const { data } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("ownerId", ownerId)
+    .eq("organizationId", orgId)
+    .order("createdAt", { ascending: false });
   return (data ?? []).map((r: Record<string, unknown>) => mapProject(r));
 }
 
-export async function listProjectsForUser(userId: number): Promise<Project[]> {
-  const { data: owned } = await supabase.from("projects").select("*").eq("ownerId", userId);
+export async function listProjectsForUser(userId: number, orgId: number): Promise<Project[]> {
+  const { data: owned } = await supabase.from("projects").select("*").eq("ownerId", userId).eq("organizationId", orgId);
   const { data: memberRows } = await supabase.from("project_members").select("projectId").eq("userId", userId);
   const memberIds = (memberRows ?? []).map((r: Record<string, unknown>) => r.projectId as number);
   let memberProjects: Project[] = [];
   if (memberIds.length > 0) {
-    const { data: mProjects } = await supabase.from("projects").select("*").in("id", memberIds);
+    const { data: mProjects } = await supabase.from("projects").select("*").in("id", memberIds).eq("organizationId", orgId);
     memberProjects = (mProjects ?? []).map((r: Record<string, unknown>) => mapProject(r));
   }
   const ownedProjects = (owned ?? []).map((r: Record<string, unknown>) => mapProject(r));
@@ -262,12 +340,16 @@ export async function listProjectsForUser(userId: number): Promise<Project[]> {
   return [...ownedProjects, ...memberProjects.filter((p) => !ownedIds.has(p.id))];
 }
 
-export async function listAllProjects(): Promise<Project[]> {
-  const { data } = await supabase.from("projects").select("*").order("createdAt", { ascending: false });
+export async function listAllProjects(orgId: number): Promise<Project[]> {
+  const { data } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("organizationId", orgId)
+    .order("createdAt", { ascending: false });
   return (data ?? []).map((r: Record<string, unknown>) => mapProject(r));
 }
 
-// Alias used by some routers
+// Aliases used by some routers
 export const getProjectsForUser = listProjectsForUser;
 export const getAllProjects = listAllProjects;
 
@@ -346,28 +428,40 @@ export async function reorderTask(id: number, sortOrder: number): Promise<void> 
   await supabase.from("tasks").update({ sortOrder, updatedAt: new Date().toISOString() }).eq("id", id);
 }
 
-export async function listAllTasks(userId: number, isAdmin: boolean): Promise<Task[]> {
+export async function listAllTasks(userId: number, isAdmin: boolean, orgId: number): Promise<Task[]> {
   if (isAdmin) {
-    const { data } = await supabase.from("tasks").select("*").is("archivedAt", null).order("sortOrder", { ascending: true });
+    const { data } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("organizationId", orgId)
+      .is("archivedAt", null)
+      .order("sortOrder", { ascending: true });
     return (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
   }
   const { data } = await supabase
     .from("tasks")
     .select("*")
+    .eq("organizationId", orgId)
     .is("archivedAt", null)
     .or(`creatorId.eq.${userId},assigneeId.eq.${userId}`)
     .order("sortOrder", { ascending: true });
   return (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
 }
 
-export async function listArchivedTasks(userId: number, isAdmin: boolean): Promise<Task[]> {
+export async function listArchivedTasks(userId: number, isAdmin: boolean, orgId: number): Promise<Task[]> {
   if (isAdmin) {
-    const { data } = await supabase.from("tasks").select("*").not("archivedAt", "is", null).order("archivedAt", { ascending: false });
+    const { data } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("organizationId", orgId)
+      .not("archivedAt", "is", null)
+      .order("archivedAt", { ascending: false });
     return (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
   }
   const { data } = await supabase
     .from("tasks")
     .select("*")
+    .eq("organizationId", orgId)
     .not("archivedAt", "is", null)
     .or(`creatorId.eq.${userId},assigneeId.eq.${userId}`)
     .order("archivedAt", { ascending: false });
@@ -382,14 +476,22 @@ export async function listTasksByProject(projectId: number): Promise<Task[]> {
 // Alias
 export const getTasksByProject = listTasksByProject;
 
-export async function searchTasks(query: string, userId: number, isAdmin: boolean): Promise<Task[]> {
+export async function searchTasks(query: string, userId: number, isAdmin: boolean, orgId: number): Promise<Task[]> {
   if (isAdmin) {
-    const { data } = await supabase.from("tasks").select("*").is("archivedAt", null).ilike("title", `%${query}%`).order("createdAt", { ascending: false }).limit(50);
+    const { data } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("organizationId", orgId)
+      .is("archivedAt", null)
+      .ilike("title", `%${query}%`)
+      .order("createdAt", { ascending: false })
+      .limit(50);
     return (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
   }
   const { data } = await supabase
     .from("tasks")
     .select("*")
+    .eq("organizationId", orgId)
     .is("archivedAt", null)
     .ilike("title", `%${query}%`)
     .or(`creatorId.eq.${userId},assigneeId.eq.${userId}`)
@@ -398,9 +500,9 @@ export async function searchTasks(query: string, userId: number, isAdmin: boolea
   return (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
 }
 
-export async function bulkDeleteTasks(ids: number[], userId: number, isAdmin: boolean): Promise<number> {
+export async function bulkDeleteTasks(ids: number[], userId: number, isAdmin: boolean, orgId: number): Promise<number> {
   if (ids.length === 0) return 0;
-  let query = supabase.from("tasks").select("id").in("id", ids);
+  let query = supabase.from("tasks").select("id").in("id", ids).eq("organizationId", orgId);
   if (!isAdmin) {
     query = (query as any).or(`creatorId.eq.${userId},assigneeId.eq.${userId}`);
   }
@@ -447,6 +549,7 @@ export async function spawnNextRecurrence(task: Task): Promise<void> {
     projectId: task.projectId,
     assigneeId: task.assigneeId,
     creatorId: task.creatorId,
+    organizationId: task.organizationId,
     status: "todo",
     priority: task.priority,
     dueDate: nextDue,
@@ -555,14 +658,14 @@ export async function getCommentCountsByTasks(taskIds: number[]): Promise<Map<nu
 
 // ─── Dashboard Stats ──────────────────────────────────────────────────────────
 
-export async function getDashboardStats(userId: number, isAdmin: boolean): Promise<{
+export async function getDashboardStats(userId: number, isAdmin: boolean, orgId: number): Promise<{
   totalTasks: number;
   doneTasks: number;
   inProgressTasks: number;
   overdueTasks: number;
   totalProjects: number;
 }> {
-  const allTasks = await listAllTasks(userId, isAdmin);
+  const allTasks = await listAllTasks(userId, isAdmin, orgId);
   const now = Date.now();
   return {
     totalTasks: allTasks.length,
@@ -570,8 +673,8 @@ export async function getDashboardStats(userId: number, isAdmin: boolean): Promi
     inProgressTasks: allTasks.filter((t) => t.status === "in_progress").length,
     overdueTasks: allTasks.filter((t) => t.status !== "done" && t.dueDate && t.dueDate < now).length,
     totalProjects: isAdmin
-      ? (await listAllProjects()).length
-      : (await listProjectsForUser(userId)).length,
+      ? (await listAllProjects(orgId)).length
+      : (await listProjectsForUser(userId, orgId)).length,
   };
 }
 
@@ -589,34 +692,58 @@ export async function getProjectTaskCounts(projectIds: number[]): Promise<Record
 
 // ─── System Settings ──────────────────────────────────────────────────────────
 
-export async function getSystemSetting(key: string): Promise<string | null> {
-  const { data } = await supabase.from("system_settings").select("value").eq("key", key).maybeSingle();
+export async function getSystemSetting(key: string, orgId: number): Promise<string | null> {
+  const { data } = await supabase
+    .from("system_settings")
+    .select("value")
+    .eq("organizationId", orgId)
+    .eq("key", key)
+    .maybeSingle();
   return data ? (data as Record<string, unknown>).value as string : null;
 }
 
-export async function setSystemSetting(key: string, value: string): Promise<void> {
+export async function setSystemSetting(key: string, value: string, orgId: number): Promise<void> {
   const now = new Date().toISOString();
-  const { data: existing } = await supabase.from("system_settings").select("key").eq("key", key).maybeSingle();
+  const { data: existing } = await supabase
+    .from("system_settings")
+    .select("key")
+    .eq("organizationId", orgId)
+    .eq("key", key)
+    .maybeSingle();
   if (existing) {
-    await supabase.from("system_settings").update({ value, updatedAt: now }).eq("key", key);
+    await supabase.from("system_settings").update({ value, updatedAt: now }).eq("organizationId", orgId).eq("key", key);
   } else {
-    await supabase.from("system_settings").insert({ key, value, updatedAt: now });
+    await supabase.from("system_settings").insert({ organizationId: orgId, key, value, updatedAt: now });
   }
 }
 
 // ─── Overdue / Due-Soon Tasks ─────────────────────────────────────────────────
 
-export async function getOverdueTasks(): Promise<Array<{ task: Task; assignee: User | null; project: Project | null }>> {
+export async function getOverdueTasks(orgId: number): Promise<Array<{ task: Task; assignee: User | null; project: Project | null }>> {
   const now = Date.now();
-  const { data } = await supabase.from("tasks").select("*").is("archivedAt", null).neq("status", "done").not("dueDate", "is", null).lt("dueDate", now);
+  const { data } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("organizationId", orgId)
+    .is("archivedAt", null)
+    .neq("status", "done")
+    .not("dueDate", "is", null)
+    .lt("dueDate", now);
   const taskRows = (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
   return _enrichTasksWithAssigneeAndProject(taskRows);
 }
 
-export async function getTasksDueSoon(windowMs = 24 * 60 * 60 * 1000): Promise<Array<{ task: Task; assignee: User | null; project: Project | null }>> {
+export async function getTasksDueSoon(windowMs = 24 * 60 * 60 * 1000, orgId: number): Promise<Array<{ task: Task; assignee: User | null; project: Project | null }>> {
   const now = Date.now();
   const soon = now + windowMs;
-  const { data } = await supabase.from("tasks").select("*").is("archivedAt", null).neq("status", "done").gte("dueDate", now).lte("dueDate", soon);
+  const { data } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("organizationId", orgId)
+    .is("archivedAt", null)
+    .neq("status", "done")
+    .gte("dueDate", now)
+    .lte("dueDate", soon);
   const taskRows = (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
   return _enrichTasksWithAssigneeAndProject(taskRows);
 }
@@ -646,15 +773,22 @@ async function _enrichTasksWithAssigneeAndProject(taskRows: Task[]) {
 export async function getTasksForCalendar(
   userId: number,
   isAdmin: boolean,
+  orgId: number,
 ): Promise<Array<Task & { projectName: string; assigneeName: string | null }>> {
   let taskRows: Task[];
   if (isAdmin) {
-    const { data } = await supabase.from("tasks").select("*").is("archivedAt", null).not("dueDate", "is", null);
+    const { data } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("organizationId", orgId)
+      .is("archivedAt", null)
+      .not("dueDate", "is", null);
     taskRows = (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
   } else {
     const { data } = await supabase
       .from("tasks")
       .select("*")
+      .eq("organizationId", orgId)
       .is("archivedAt", null)
       .not("dueDate", "is", null)
       .or(`creatorId.eq.${userId},assigneeId.eq.${userId}`);
@@ -680,16 +814,16 @@ export async function getTasksForCalendar(
   }));
 }
 
-export async function getMilestonesForCalendar(userId: number, isAdmin: boolean): Promise<Array<Milestone & { projectName: string }>> {
+export async function getMilestonesForCalendar(userId: number, isAdmin: boolean, orgId: number): Promise<Array<Milestone & { projectName: string }>> {
   let projectNameMap: Map<number, string>;
   let projectIds: number[];
   if (isAdmin) {
-    const { data } = await supabase.from("projects").select("id, name");
+    const { data } = await supabase.from("projects").select("id, name").eq("organizationId", orgId);
     const rows = (data ?? []) as Array<Record<string, unknown>>;
     projectIds = rows.map((r) => r.id as number);
     projectNameMap = new Map(rows.map((r) => [r.id as number, r.name as string]));
   } else {
-    const projects = await listProjectsForUser(userId);
+    const projects = await listProjectsForUser(userId, orgId);
     projectIds = projects.map((p) => p.id);
     projectNameMap = new Map(projects.map((p) => [p.id, p.name]));
   }
@@ -777,24 +911,25 @@ async function _enrichProjectsWithStats(projectList: Project[]) {
   });
 }
 
-export async function getAllProjectsWithOwner() {
-  const projects = await listAllProjects();
+export async function getAllProjectsWithOwner(orgId: number) {
+  const projects = await listAllProjects(orgId);
   return _enrichProjectsWithStats(projects);
 }
 
-export async function getProjectsForUserWithOwner(userId: number) {
-  const userProjects = await listProjectsForUser(userId);
+export async function getProjectsForUserWithOwner(userId: number, orgId: number) {
+  const userProjects = await listProjectsForUser(userId, orgId);
   return _enrichProjectsWithStats(userProjects);
 }
 
 // ─── Strategic Organizer ──────────────────────────────────────────────────────
 
-export async function getStrategicOrganizer(ownerId: number): Promise<StrategicOrganizer | null> {
-  const { data } = await supabase.from("strategic_organizer").select("*").eq("ownerId", ownerId).maybeSingle();
+export async function getStrategicOrganizer(orgId: number): Promise<StrategicOrganizer | null> {
+  const { data } = await supabase.from("strategic_organizer").select("*").eq("organizationId", orgId).maybeSingle();
   if (!data) return null;
   const r = data as Record<string, unknown>;
   return {
     id: r.id as number,
+    organizationId: r.organizationId as number,
     ownerId: r.ownerId as number,
     schoolName: (r.schoolName as string) ?? null,
     mission: (r.mission as string) ?? null,
@@ -813,16 +948,16 @@ export async function getStrategicOrganizer(ownerId: number): Promise<StrategicO
 
 export async function upsertStrategicOrganizer(data: InsertStrategicOrganizer): Promise<StrategicOrganizer | null> {
   const now = new Date().toISOString();
-  const { data: existing } = await supabase.from("strategic_organizer").select("id").eq("ownerId", data.ownerId).maybeSingle();
+  const { data: existing } = await supabase.from("strategic_organizer").select("id").eq("organizationId", data.organizationId).maybeSingle();
   if (existing) {
-    await supabase.from("strategic_organizer").update({ ...data, updatedAt: now }).eq("ownerId", data.ownerId);
+    await supabase.from("strategic_organizer").update({ ...data, updatedAt: now }).eq("organizationId", data.organizationId);
   } else {
     await supabase.from("strategic_organizer").insert({ ...data, createdAt: now, updatedAt: now });
   }
-  return getStrategicOrganizer(data.ownerId);
+  return getStrategicOrganizer(data.organizationId);
 }
 
-export async function saveStrategicOrganizerVersion(data: { ownerId: number; label?: string; snapshotJson: string }): Promise<StrategicOrganizerVersion | null> {
+export async function saveStrategicOrganizerVersion(data: { organizationId: number; ownerId: number; label?: string; snapshotJson: string }): Promise<StrategicOrganizerVersion | null> {
   const { data: row, error } = await supabase
     .from("strategic_organizer_versions")
     .insert({ ...data, createdAt: new Date().toISOString() })
@@ -830,19 +965,23 @@ export async function saveStrategicOrganizerVersion(data: { ownerId: number; lab
     .single();
   if (error || !row) return null;
   const r = row as Record<string, unknown>;
-  return { id: r.id as number, ownerId: r.ownerId as number, label: (r.label as string) ?? null, snapshotJson: r.snapshotJson as string, createdAt: toDate(r.createdAt as string) };
+  return { id: r.id as number, organizationId: r.organizationId as number, ownerId: r.ownerId as number, label: (r.label as string) ?? null, snapshotJson: r.snapshotJson as string, createdAt: toDate(r.createdAt as string) };
 }
 
-export async function listStrategicOrganizerVersions(ownerId: number): Promise<StrategicOrganizerVersion[]> {
-  const { data } = await supabase.from("strategic_organizer_versions").select("*").eq("ownerId", ownerId).order("createdAt", { ascending: false });
-  return (data ?? []).map((r: Record<string, unknown>) => ({ id: r.id as number, ownerId: r.ownerId as number, label: (r.label as string) ?? null, snapshotJson: r.snapshotJson as string, createdAt: toDate(r.createdAt as string) }));
+export async function listStrategicOrganizerVersions(orgId: number): Promise<StrategicOrganizerVersion[]> {
+  const { data } = await supabase
+    .from("strategic_organizer_versions")
+    .select("*")
+    .eq("organizationId", orgId)
+    .order("createdAt", { ascending: false });
+  return (data ?? []).map((r: Record<string, unknown>) => ({ id: r.id as number, organizationId: r.organizationId as number, ownerId: r.ownerId as number, label: (r.label as string) ?? null, snapshotJson: r.snapshotJson as string, createdAt: toDate(r.createdAt as string) }));
 }
 
 export async function getStrategicOrganizerVersion(id: number): Promise<StrategicOrganizerVersion | null> {
   const { data } = await supabase.from("strategic_organizer_versions").select("*").eq("id", id).maybeSingle();
   if (!data) return null;
   const r = data as Record<string, unknown>;
-  return { id: r.id as number, ownerId: r.ownerId as number, label: (r.label as string) ?? null, snapshotJson: r.snapshotJson as string, createdAt: toDate(r.createdAt as string) };
+  return { id: r.id as number, organizationId: r.organizationId as number, ownerId: r.ownerId as number, label: (r.label as string) ?? null, snapshotJson: r.snapshotJson as string, createdAt: toDate(r.createdAt as string) };
 }
 
 export async function deleteStrategicOrganizerVersion(id: number): Promise<void> {
@@ -852,6 +991,7 @@ export async function deleteStrategicOrganizerVersion(id: number): Promise<void>
 // ─── Rock Health Snapshots ────────────────────────────────────────────────────
 
 export async function saveRockHealthSnapshot(data: {
+  organizationId: number;
   snapshotDate: number;
   onTrack: number;
   offTrack: number;
@@ -863,10 +1003,16 @@ export async function saveRockHealthSnapshot(data: {
   await supabase.from("rock_health_snapshots").insert({ ...data, createdAt: new Date().toISOString() });
 }
 
-export async function getRockHealthTrend(limit = 8): Promise<RockHealthSnapshot[]> {
-  const { data } = await supabase.from("rock_health_snapshots").select("*").order("snapshotDate", { ascending: false }).limit(limit);
+export async function getRockHealthTrend(limit = 8, orgId: number): Promise<RockHealthSnapshot[]> {
+  const { data } = await supabase
+    .from("rock_health_snapshots")
+    .select("*")
+    .eq("organizationId", orgId)
+    .order("snapshotDate", { ascending: false })
+    .limit(limit);
   return (data ?? []).map((r: Record<string, unknown>) => ({
     id: r.id as number,
+    organizationId: r.organizationId as number,
     snapshotDate: r.snapshotDate as number,
     onTrack: r.onTrack as number,
     offTrack: r.offTrack as number,
@@ -911,13 +1057,18 @@ export async function getRockCommentById(id: number): Promise<RockComment | null
 
 // ─── Announcements ────────────────────────────────────────────────────────────
 
-export async function listAnnouncements(): Promise<Announcement[]> {
+export async function listAnnouncements(orgId: number): Promise<Announcement[]> {
   const now = Date.now();
-  const { data } = await supabase.from("announcements").select("*").order("isPinned", { ascending: false }).order("createdAt", { ascending: false });
+  const { data } = await supabase
+    .from("announcements")
+    .select("*")
+    .eq("organizationId", orgId)
+    .order("isPinned", { ascending: false })
+    .order("createdAt", { ascending: false });
   return (data ?? []).map((r: Record<string, unknown>) => mapAnnouncement(r)).filter((a) => !a.expiresAt || a.expiresAt > now);
 }
 
-export async function createAnnouncement(data: { title: string; body: string; isPinned: boolean; authorId: number; expiresAt?: number | null }): Promise<Announcement | null> {
+export async function createAnnouncement(data: { organizationId: number; title: string; body: string; isPinned: boolean; authorId: number; expiresAt?: number | null }): Promise<Announcement | null> {
   const now = new Date().toISOString();
   const { data: row, error } = await supabase.from("announcements").insert({ ...data, createdAt: now, updatedAt: now }).select().single();
   if (error || !row) return null;
@@ -934,20 +1085,20 @@ export async function deleteAnnouncement(id: number): Promise<void> {
 
 // ─── Member Scorecard ─────────────────────────────────────────────────────────
 
-export async function getUserScorecard(targetUserId: number) {
+export async function getUserScorecard(targetUserId: number, orgId: number) {
   const targetUser = await getUserById(targetUserId);
   if (!targetUser) return null;
-  const ownedRocks = await listProjectsByOwner(targetUserId);
+  const ownedRocks = await listProjectsByOwner(targetUserId, orgId);
   const { data: memberRows } = await supabase.from("project_members").select("projectId").eq("userId", targetUserId);
   const memberProjectIds = (memberRows ?? []).map((r: Record<string, unknown>) => r.projectId as number);
   let memberRocks: Project[] = [];
   if (memberProjectIds.length > 0) {
-    const { data: mProjects } = await supabase.from("projects").select("*").in("id", memberProjectIds);
+    const { data: mProjects } = await supabase.from("projects").select("*").in("id", memberProjectIds).eq("organizationId", orgId);
     memberRocks = (mProjects ?? []).map((r: Record<string, unknown>) => mapProject(r));
   }
   const ownedIds = new Set(ownedRocks.map((r) => r.id));
   const allRocks = [...ownedRocks, ...memberRocks.filter((r) => !ownedIds.has(r.id))];
-  const userTasks = await listAllTasks(targetUserId, false);
+  const userTasks = await listAllTasks(targetUserId, false, orgId);
   const now = Date.now();
   const totalTasks = userTasks.length;
   const doneTasks = userTasks.filter((t) => t.status === "done").length;
@@ -962,7 +1113,7 @@ export async function getUserScorecard(targetUserId: number) {
       milestoneOnTimeRate = Math.round((onTime / completedMilestones.length) * 100);
     }
   }
-  const { data: recentActivityRows } = await supabase.from("tasks").select("*").eq("assigneeId", targetUserId).order("updatedAt", { ascending: false }).limit(10);
+  const { data: recentActivityRows } = await supabase.from("tasks").select("*").eq("assigneeId", targetUserId).eq("organizationId", orgId).order("updatedAt", { ascending: false }).limit(10);
   const recentActivity = (recentActivityRows ?? []).map((r: Record<string, unknown>) => mapTask(r));
   return {
     user: targetUser,

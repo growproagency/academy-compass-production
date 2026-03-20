@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
+import { requireOrg } from "../middleware/org";
 import {
   getAllProjects, getAllProjectsWithOwner, getProjectById, createProject, updateProject,
   deleteProject, getProjectsForUser, getProjectsForUserWithOwner, getProjectMembers,
@@ -12,13 +13,14 @@ import {
 const router = Router();
 
 // GET /api/projects
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, requireOrg, async (req, res) => {
   const user = (req as any).user;
+  const org = (req as any).org;
   try {
     if (req.query.stats === "true") {
       const projectList = user.role === "admin"
-        ? await getAllProjectsWithOwner()
-        : await getProjectsForUserWithOwner(user.id);
+        ? await getAllProjectsWithOwner(org.id)
+        : await getProjectsForUserWithOwner(user.id, org.id);
       const ids = projectList.map((p: any) => p.id);
       const counts = await getProjectTaskCounts(ids);
       return res.json(projectList.map((p: any) => ({
@@ -28,8 +30,8 @@ router.get("/", requireAuth, async (req, res) => {
       })));
     }
     const projects = user.role === "admin"
-      ? await getAllProjects()
-      : await getProjectsForUser(user.id);
+      ? await getAllProjects(org.id)
+      : await getProjectsForUser(user.id, org.id);
     res.json(projects);
   } catch (e: any) {
     res.status(500).json({ message: e.message });
@@ -37,9 +39,10 @@ router.get("/", requireAuth, async (req, res) => {
 });
 
 // GET /api/projects/health-trend
-router.get("/health-trend", requireAuth, async (_req, res) => {
+router.get("/health-trend", requireAuth, requireOrg, async (req, res) => {
+  const org = (req as any).org;
   try {
-    res.json(await getRockHealthTrend(8));
+    res.json(await getRockHealthTrend(8, org.id));
   } catch (e: any) {
     res.status(500).json({ message: e.message });
   }
@@ -66,12 +69,20 @@ router.get("/:id", requireAuth, async (req, res) => {
 });
 
 // POST /api/projects
-router.post("/", requireAuth, async (req, res) => {
+router.post("/", requireAuth, requireOrg, async (req, res) => {
   const user = (req as any).user;
+  const org = (req as any).org;
   const { name, description, dueDate, rockStatus } = req.body;
   if (!name) return res.status(400).json({ message: "Name is required" });
   try {
-    const project = await createProject({ name, description: description ?? null, dueDate: dueDate ?? null, rockStatus: rockStatus ?? "on_track", ownerId: user.id });
+    const project = await createProject({
+      name,
+      description: description ?? null,
+      dueDate: dueDate ?? null,
+      rockStatus: rockStatus ?? "on_track",
+      ownerId: user.id,
+      organizationId: org.id,
+    });
     res.status(201).json(project);
   } catch (e: any) {
     res.status(500).json({ message: e.message });

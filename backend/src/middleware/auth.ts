@@ -18,9 +18,13 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       return next();
     }
 
+    // Resolve org from request (set by orgMiddleware which runs before authMiddleware)
+    const org = (req as any).org ?? null;
+
     // Upsert user into our DB.
     // Only pass `name` on first creation — do NOT overwrite a user-set name on
     // subsequent logins (Supabase metadata is null for email/password accounts).
+    // Assign organizationId from the org resolved by the subdomain on first login.
     const existingUser = await getUserByOpenId(supabaseUser.id);
     await upsertUser({
       openId: supabaseUser.id,
@@ -30,6 +34,10 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         : (supabaseUser.user_metadata?.full_name ?? supabaseUser.user_metadata?.name ?? null),
       loginMethod: supabaseUser.app_metadata?.provider ?? null,
       lastSignedIn: new Date(),
+      // Assign org on first login; don't overwrite if already set
+      organizationId: existingUser?.organizationId !== undefined
+        ? undefined
+        : (org?.id ?? null),
     } as any);
 
     const dbUser = await getUserByOpenId(supabaseUser.id);
@@ -53,5 +61,12 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const user = (req as any).user;
   if (!user) return res.status(401).json({ message: "Unauthorized" });
   if (user.role !== "admin") return res.status(403).json({ message: "Admin access required" });
+  next();
+}
+
+export function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  const user = (req as any).user;
+  if (!user) return res.status(401).json({ message: "Unauthorized" });
+  if (user.role !== "superadmin") return res.status(403).json({ message: "Superadmin access required" });
   next();
 }

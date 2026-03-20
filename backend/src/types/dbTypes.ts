@@ -1,10 +1,23 @@
 // Shared database types — replaces drizzle/schema inferred types
 
-export type UserRole = "user" | "admin";
+export type UserRole = "user" | "admin" | "superadmin";
 export type RockStatus = "on_track" | "off_track" | "assist" | "complete";
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "low" | "medium" | "high";
 export type RecurrenceType = "none" | "daily" | "biweekly" | "weekly" | "monthly";
+
+export interface Organization {
+  id: number;
+  name: string;
+  slug: string;
+  brandPrimaryColor: string | null;
+  brandAccentColor: string | null;
+  logoUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type InsertOrganization = Omit<Organization, "id" | "createdAt" | "updatedAt">;
 
 export interface User {
   id: number;
@@ -13,6 +26,7 @@ export interface User {
   email: string | null;
   loginMethod: string | null;
   role: UserRole;
+  organizationId: number | null;
   createdAt: Date;
   updatedAt: Date;
   lastSignedIn: Date;
@@ -25,6 +39,7 @@ export interface Project {
   name: string;
   description: string | null;
   ownerId: number;
+  organizationId: number;
   dueDate: number | null;
   rockStatus: RockStatus;
   createdAt: Date;
@@ -50,6 +65,7 @@ export interface Task {
   projectId: number | null;
   assigneeId: number | null;
   creatorId: number;
+  organizationId: number;
   status: TaskStatus;
   priority: TaskPriority;
   dueDate: number | null;
@@ -89,6 +105,7 @@ export interface TaskComment {
 export type InsertTaskComment = Omit<TaskComment, "id" | "createdAt" | "updatedAt" | "isActivity"> & { isActivity?: boolean };
 
 export interface SystemSetting {
+  organizationId: number;
   key: string;
   value: string;
   updatedAt: Date;
@@ -110,6 +127,7 @@ export type InsertMilestone = Omit<Milestone, "id" | "createdAt" | "updatedAt" |
 
 export interface StrategicOrganizer {
   id: number;
+  organizationId: number;
   ownerId: number;
   schoolName?: string | null;
   mission?: string | null;
@@ -129,6 +147,7 @@ export type InsertStrategicOrganizer = Omit<StrategicOrganizer, "id" | "createdA
 
 export interface StrategicOrganizerVersion {
   id: number;
+  organizationId: number;
   ownerId: number;
   label: string | null;
   snapshotJson: string;
@@ -139,6 +158,7 @@ export type InsertStrategicOrganizerVersion = Omit<StrategicOrganizerVersion, "i
 
 export interface RockHealthSnapshot {
   id: number;
+  organizationId: number;
   snapshotDate: number;
   onTrack: number;
   offTrack: number;
@@ -153,6 +173,7 @@ export type InsertRockHealthSnapshot = Omit<RockHealthSnapshot, "id" | "createdA
 
 export interface Announcement {
   id: number;
+  organizationId: number;
   title: string;
   body: string;
   isPinned: boolean;

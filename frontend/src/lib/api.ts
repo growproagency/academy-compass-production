@@ -3,6 +3,20 @@ import { supabase } from "./supabaseClient";
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
+/**
+ * Detect the org slug from the current URL.
+ * - Production: extract subdomain from hostname (e.g. "school" from "school.app.com")
+ * - Local dev: fall back to VITE_ORG_SLUG env var
+ */
+function getOrgSlug(): string {
+  const hostname = window.location.hostname;
+  if (hostname !== "localhost" && hostname !== "127.0.0.1") {
+    const parts = hostname.split(".");
+    if (parts.length >= 3) return parts[0];
+  }
+  return import.meta.env.VITE_ORG_SLUG || "";
+}
+
 class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -16,24 +30,24 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-
-  // const url = `${API_BASE}/api${path}`; for testing
-  const url = `${API_BASE}${path}`; // production
+  const url = `${API_BASE}${path}`;
 
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
+  const orgSlug = getOrgSlug();
+
   const res = await fetch(url, {
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+      ...(orgSlug ? { "X-Org-Slug": orgSlug } : {}),
       ...options.headers,
     },
     ...options,
   });
 
   if (res.status === 401) {
-    // Let the auth state listener in useAuth handle the redirect
     throw new ApiError("Unauthorized", 401);
   }
 
@@ -71,6 +85,17 @@ function del<T>(path: string, body?: unknown) {
 }
 
 export const api = {
+  // ── Orgs ──────────────────────────────────────────────────────────────────
+  orgs: {
+    current: () => get("/orgs/current"),
+    list: () => get("/orgs"),
+    create: (data: { name: string; slug: string; brandPrimaryColor?: string; brandAccentColor?: string; logoUrl?: string }) =>
+      post("/orgs", data),
+    update: (id: number, data: { name?: string; slug?: string; brandPrimaryColor?: string; brandAccentColor?: string; logoUrl?: string }) =>
+      patch(`/orgs/${id}`, data),
+    delete: (id: number) => del(`/orgs/${id}`),
+  },
+
   // ── Auth ──────────────────────────────────────────────────────────────────
   auth: {
     me: () => get("/auth/me"),

@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import express from "express";
+import { orgMiddleware } from "./middleware/org";
 import { authMiddleware } from "./middleware/auth";
 
 import cors from "cors";
@@ -8,6 +9,7 @@ import authRouter from "./routes/auth";
 import usersRouter from "./routes/users";
 import projectsRouter from "./routes/projects";
 import tasksRouter from "./routes/tasks";
+import orgsRouter from "./routes/orgs";
 import {
   subtasksRouter,
   commentsRouter,
@@ -29,8 +31,13 @@ app.use(cors({
   credentials: true,
 }));
 
-// ── Routes ────────────────────────────────────────────────────────────────────
+// Org middleware runs first — resolves req.org from subdomain / X-Org-Slug header
+app.use(orgMiddleware);
+// Auth middleware runs second — resolves req.user and assigns org on first login
 app.use(authMiddleware);
+
+// ── Routes ────────────────────────────────────────────────────────────────────
+app.use("/api/orgs", orgsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/projects", projectsRouter);
