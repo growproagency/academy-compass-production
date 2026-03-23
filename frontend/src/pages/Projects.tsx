@@ -341,7 +341,7 @@ export default function Projects() {
     const title = quickMilestoneTitle.trim();
     if (!title) return;
     setQuickMilestonePending(true);
-    const dueDateTs = quickMilestoneDueDate ? new Date(quickMilestoneDueDate).getTime() : undefined;
+    const dueDateTs = quickMilestoneDueDate ? new Date(quickMilestoneDueDate + "T00:00:00").getTime() : undefined;
     createMilestoneMutation.mutate({ projectId, title, dueDate: dueDateTs });
   };
 
