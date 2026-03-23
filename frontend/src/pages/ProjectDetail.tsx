@@ -174,14 +174,14 @@ export default function ProjectDetail() {
   const [deleteMilestoneId, setDeleteMilestoneId] = useState<number | null>(null);
   const utils = trpc.useUtils();
 
-  // Rock status config
-  const ROCK_STATUS_CONFIG = {
+  // Project status config
+  const PROJECT_STATUS_CONFIG = {
     on_track:  { label: "On Track",  color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/30" },
     off_track: { label: "Off Track", color: "text-destructive",  bg: "bg-destructive/10 border-destructive/30" },
     assist:    { label: "Assist",    color: "text-amber-500",   bg: "bg-amber-500/10 border-amber-500/30" },
     complete:  { label: "Complete",  color: "text-primary",     bg: "bg-primary/10 border-primary/30" },
   } as const;
-  type RockStatus = keyof typeof ROCK_STATUS_CONFIG;
+  type ProjectStatus = keyof typeof PROJECT_STATUS_CONFIG;
 
   const { data: project, isLoading: projectLoading } = trpc.projects.getById.useQuery({ id: projectId });
   const { data: tasks, isLoading: tasksLoading } = trpc.tasks.listByProject.useQuery({ projectId });
@@ -225,13 +225,13 @@ export default function ProjectDetail() {
     onError: (e) => toast.error(e.message),
   });
 
-  const updateRockStatus = trpc.projects.update.useMutation({
-    onMutate: async ({ rockStatus }) => {
+  const updateProjectStatus = trpc.projects.update.useMutation({
+    onMutate: async ({ projectStatus }) => {
       // Optimistic update
       await utils.projects.getById.cancel({ id: projectId });
       const prev = utils.projects.getById.getData({ id: projectId });
-      if (prev && rockStatus !== undefined) {
-        utils.projects.getById.setData({ id: projectId }, { ...prev, rockStatus: rockStatus ?? null });
+      if (prev && projectStatus !== undefined) {
+        utils.projects.getById.setData({ id: projectId }, { ...prev, projectStatus: projectStatus ?? null });
       }
       return { prev };
     },
@@ -242,7 +242,7 @@ export default function ProjectDetail() {
     onSuccess: () => {
       utils.projects.getById.invalidate({ id: projectId });
       utils.projects.listWithStats.invalidate();
-      toast.success("Rock status updated");
+      toast.success("Project status updated");
     },
   });
 
@@ -321,18 +321,18 @@ export default function ProjectDetail() {
       )
     );
   };
-  const { data: comments, isLoading: commentsLoading } = trpc.rockComments.list.useQuery({ projectId });
+  const { data: comments, isLoading: commentsLoading } = trpc.projectComments.list.useQuery({ projectId });
 
-  const addComment = trpc.rockComments.create.useMutation({
+  const addComment = trpc.projectComments.create.useMutation({
     onSuccess: () => {
-      utils.rockComments.list.invalidate({ projectId });
+      utils.projectComments.list.invalidate({ projectId });
       setCommentText("");
     },
     onError: (e) => toast.error(e.message),
   });
 
-  const deleteComment = trpc.rockComments.delete.useMutation({
-    onSuccess: () => utils.rockComments.list.invalidate({ projectId }),
+  const deleteComment = trpc.projectComments.delete.useMutation({
+    onSuccess: () => utils.projectComments.list.invalidate({ projectId }),
     onError: (e) => toast.error(e.message),
   });
 
@@ -352,8 +352,8 @@ export default function ProjectDetail() {
   if (!project) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
-        <p className="text-muted-foreground">Rock not found</p>
-        <Button onClick={() => setLocation("/projects")}>Back to Rocks</Button>
+        <p className="text-muted-foreground">Project not found</p>
+        <Button onClick={() => setLocation("/projects")}>Back to Projects</Button>
       </div>
     );
   }
@@ -400,19 +400,19 @@ export default function ProjectDetail() {
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold truncate">{project.name}</h1>
-            <Badge variant="outline" className="text-xs border-primary/40 text-primary shrink-0">Rock</Badge>
+            <Badge variant="outline" className="text-xs border-primary/40 text-primary shrink-0">Project</Badge>
             {/* Status quick-update */}
             {isOwner ? (
               <Select
-                value={project.rockStatus ?? ""}
+                value={project.projectStatus ?? ""}
                 onValueChange={(val) =>
-                  updateRockStatus.mutate({ id: projectId, rockStatus: val as RockStatus })
+                  updateProjectStatus.mutate({ id: projectId, projectStatus: val as ProjectStatus })
                 }
               >
                 <SelectTrigger
                   className={`h-6 text-xs px-2 py-0 border rounded-full w-auto gap-1 shrink-0 ${
-                    project.rockStatus
-                      ? ROCK_STATUS_CONFIG[project.rockStatus as RockStatus]?.bg ?? "border-border/60"
+                    project.projectStatus
+                      ? PROJECT_STATUS_CONFIG[project.projectStatus as ProjectStatus]?.bg ?? "border-border/60"
                       : "border-border/60 text-muted-foreground"
                   }`}
                 >
@@ -426,16 +426,16 @@ export default function ProjectDetail() {
                   <SelectItem value="complete">🏁 Complete</SelectItem>
                 </SelectContent>
               </Select>
-            ) : project.rockStatus ? (
+            ) : project.projectStatus ? (
               <Badge
                 variant="outline"
                 className={`text-xs shrink-0 ${
-                  ROCK_STATUS_CONFIG[project.rockStatus as RockStatus]?.bg ?? ""
+                  PROJECT_STATUS_CONFIG[project.projectStatus as ProjectStatus]?.bg ?? ""
                 } ${
-                  ROCK_STATUS_CONFIG[project.rockStatus as RockStatus]?.color ?? ""
+                  PROJECT_STATUS_CONFIG[project.projectStatus as ProjectStatus]?.color ?? ""
                 }`}
               >
-                {ROCK_STATUS_CONFIG[project.rockStatus as RockStatus]?.label}
+                {PROJECT_STATUS_CONFIG[project.projectStatus as ProjectStatus]?.label}
               </Badge>
             ) : null}
           </div>
@@ -619,11 +619,11 @@ export default function ProjectDetail() {
                   <div className="flex items-center gap-2 min-w-0">
                     <Avatar className="h-7 w-7 border border-border shrink-0">
                       <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
-                        {getUserInitials(member.user?.name ?? "")}
+                        {getUserInitials(member.user?.name ?? member.user?.email ?? "")}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <p className="text-xs font-medium truncate">{member.user?.name ?? "Unknown"}</p>
+                      <p className="text-xs font-medium truncate">{member.user?.name ?? member.user?.email ?? "Unknown"}</p>
                       {project.ownerId === member.userId && (
                         <p className="text-[10px] text-primary">Owner</p>
                       )}
@@ -852,7 +852,7 @@ export default function ProjectDetail() {
             <DialogTitle className="text-xl">All Milestones Complete!</DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground">
               Every milestone for <strong>{project?.name}</strong> has been completed.
-              Would you like to mark this Rock as <strong>Complete</strong>?
+              Would you like to mark this Project as <strong>Complete</strong>?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col sm:flex-row gap-2 mt-2">
@@ -862,7 +862,7 @@ export default function ProjectDetail() {
             <Button
               className="flex-1"
               onClick={() => {
-                updateRockStatus.mutate({ id: projectId, rockStatus: "complete" });
+                updateProjectStatus.mutate({ id: projectId, projectStatus: "complete" });
                 setCelebrateOpen(false);
               }}
             >
@@ -878,7 +878,7 @@ export default function ProjectDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Member</AlertDialogTitle>
             <AlertDialogDescription>
-              Remove <strong>{userMap.get(removeMemberId ?? 0)}</strong> from this Rock?
+              Remove <strong>{userMap.get(removeMemberId ?? 0)}</strong> from this Project?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

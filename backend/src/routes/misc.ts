@@ -10,7 +10,7 @@ import {
   getStrategicOrganizer, upsertStrategicOrganizer, saveStrategicOrganizerVersion,
   listStrategicOrganizerVersions, getStrategicOrganizerVersion, deleteStrategicOrganizerVersion,
   listAnnouncements, createAnnouncement, updateAnnouncement, deleteAnnouncement,
-  deleteRockComment, getRockCommentById,
+  deleteProjectComment, getProjectCommentById,
   getOverdueTasks, getTasksDueSoon, getSystemSetting, setSystemSetting,
 } from "../db";
 
@@ -193,16 +193,16 @@ announcementsRouter.delete("/:id", requireAuth, requireAdmin, async (req, res) =
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-export const rockCommentsRouter = Router();
+export const projectCommentsRouter = Router();
 
-rockCommentsRouter.delete("/:id", requireAuth, async (req, res) => {
+projectCommentsRouter.delete("/:id", requireAuth, async (req, res) => {
   const user = (req as any).user;
-  const comment = await getRockCommentById(Number(req.params.id));
+  const comment = await getProjectCommentById(Number(req.params.id));
   if (!comment) return res.status(404).json({ message: "Not found" });
   if ((comment as any).authorId !== user.id && user.role !== "admin") {
     return res.status(403).json({ message: "Forbidden" });
   }
-  await deleteRockComment(Number(req.params.id));
+  await deleteProjectComment(Number(req.params.id));
   res.json({ success: true });
 });
 
@@ -254,18 +254,18 @@ notificationsRouter.get("/due-soon-count", requireAuth, requireAdmin, requireOrg
 notificationsRouter.get("/preview-digest", requireAuth, requireAdmin, requireOrg, async (req, res) => {
   const org = (req as any).org;
   const overdue = await getOverdueTasks(org.id);
-  if ((overdue as any[]).length === 0) return res.json({ count: 0, rocks: [] });
+  if ((overdue as any[]).length === 0) return res.json({ count: 0, projects: [] });
   const byProject: Record<string, any[]> = {};
   for (const row of overdue as any[]) {
-    const rockName = row.project?.name ?? "No Rock";
-    if (!byProject[rockName]) byProject[rockName] = [];
-    byProject[rockName].push(row);
+    const projectName = row.project?.name ?? "No Project";
+    if (!byProject[projectName]) byProject[projectName] = [];
+    byProject[projectName].push(row);
   }
-  const rocks = Object.entries(byProject).map(([rockName, rows]) => ({
-    rockName,
+  const projects = Object.entries(byProject).map(([projectName, rows]) => ({
+    projectName,
     tasks: rows.map(({ task, assignee }: any) => ({ id: task.id, title: task.title, priority: task.priority, dueDate: task.dueDate, assigneeName: assignee?.name ?? null })),
   }));
-  res.json({ count: (overdue as any[]).length, rocks });
+  res.json({ count: (overdue as any[]).length, projects });
 });
 
 notificationsRouter.post("/send-digest", requireAuth, requireAdmin, async (_req, res) => {

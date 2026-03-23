@@ -20,12 +20,14 @@ import StrategicOrganizerPreview from "./pages/StrategicOrganizerPreview";
 import Announcements from "./pages/Announcements";
 import MemberScorecard from "./pages/MemberScorecard";
 import AuthCallback from "./pages/AuthCallback";
+import SetPassword from "./pages/SetPassword";
 import { CommandPalette } from "./components/CommandPalette";
 
 function Router() {
   return (
     <Switch>
       <Route path="/auth/callback" component={AuthCallback} />
+      <Route path="/set-password" component={SetPassword} />
       <Route path="/strategic-organizer/preview" component={StrategicOrganizerPreview} />
       <Route>
         <DashboardLayout>

@@ -1,7 +1,7 @@
 // Shared database types — replaces drizzle/schema inferred types
 
 export type UserRole = "user" | "admin" | "superadmin";
-export type RockStatus = "on_track" | "off_track" | "assist" | "complete";
+export type ProjectStatus = "on_track" | "off_track" | "assist" | "complete";
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "low" | "medium" | "high";
 export type RecurrenceType = "none" | "daily" | "biweekly" | "weekly" | "monthly";
@@ -41,7 +41,7 @@ export interface Project {
   ownerId: number;
   organizationId: number;
   dueDate: number | null;
-  rockStatus: RockStatus;
+  projectStatus: ProjectStatus;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -156,7 +156,7 @@ export interface StrategicOrganizerVersion {
 
 export type InsertStrategicOrganizerVersion = Omit<StrategicOrganizerVersion, "id" | "createdAt">;
 
-export interface RockHealthSnapshot {
+export interface ProjectHealthSnapshot {
   id: number;
   organizationId: number;
   snapshotDate: number;
@@ -169,7 +169,7 @@ export interface RockHealthSnapshot {
   createdAt: Date;
 }
 
-export type InsertRockHealthSnapshot = Omit<RockHealthSnapshot, "id" | "createdAt">;
+export type InsertProjectHealthSnapshot = Omit<ProjectHealthSnapshot, "id" | "createdAt">;
 
 export interface Announcement {
   id: number;
@@ -185,7 +185,7 @@ export interface Announcement {
 
 export type InsertAnnouncement = Omit<Announcement, "id" | "createdAt" | "updatedAt">;
 
-export interface RockComment {
+export interface ProjectComment {
   id: number;
   projectId: number;
   authorId: number;
@@ -194,4 +194,16 @@ export interface RockComment {
   updatedAt: Date;
 }
 
-export type InsertRockComment = Omit<RockComment, "id" | "createdAt" | "updatedAt">;
+export type InsertProjectComment = Omit<ProjectComment, "id" | "createdAt" | "updatedAt">;
+
+export interface Invite {
+  id: number;
+  organizationId: number;
+  email: string;
+  role: UserRole;
+  invitedBy: number;
+  acceptedAt: Date | null;
+  createdAt: Date;
+}
+
+export type InsertInvite = Omit<Invite, "id" | "acceptedAt" | "createdAt">;

@@ -136,7 +136,7 @@ function AnnouncementForm({
 
 export default function Announcements() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
   const utils = trpc.useUtils();
 
   const { data: announcements, isLoading } = trpc.announcements.list.useQuery();

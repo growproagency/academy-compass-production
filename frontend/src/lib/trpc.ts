@@ -64,15 +64,18 @@ import {
   useCreateAnnouncement,
   useUpdateAnnouncement,
   useDeleteAnnouncement,
-  useRockComments,
-  useCreateRockComment,
-  useDeleteRockComment,
+  useProjectComments,
+  useCreateProjectComment,
+  useDeleteProjectComment,
   useOverdueCount,
   useNotificationSchedule,
   useReminderWindow,
   useDueSoonCount,
   usePreviewDigest,
   useWeeklyReportSchedule,
+  useInvites,
+  useCreateInvite,
+  useDeleteInvite,
 } from "@/hooks/useApi";
 
 // Helper: returns a "useUtils" function that mimics trpc.useUtils()
@@ -135,12 +138,12 @@ function makeUtils(qc: ReturnType<typeof useQueryClient>) {
             : qc.invalidateQueries({ queryKey: ["subtasks"] }),
       },
     },
-    rockComments: {
+    projectComments: {
       list: {
         invalidate: (args?: { projectId: number }) =>
           args
-            ? qc.invalidateQueries({ queryKey: QK.rockComments(args.projectId) })
-            : qc.invalidateQueries({ queryKey: ["rockComments"] }),
+            ? qc.invalidateQueries({ queryKey: QK.projectComments(args.projectId) })
+            : qc.invalidateQueries({ queryKey: ["projectComments"] }),
       },
     },
     strategicOrganizer: {
@@ -324,10 +327,10 @@ export const trpc = {
     togglePin: { useMutation: (opts?: object) => withOpts(useUpdateAnnouncement(), opts) },
   },
 
-  rockComments: {
-    list: { useQuery: ({ projectId }: { projectId: number }) => useRockComments(projectId) },
-    create: { useMutation: (opts?: object) => withOpts(useCreateRockComment(), opts) },
-    delete: { useMutation: (opts?: object) => withOpts(useDeleteRockComment(), opts) },
+  projectComments: {
+    list: { useQuery: ({ projectId }: { projectId: number }) => useProjectComments(projectId) },
+    create: { useMutation: (opts?: object) => withOpts(useCreateProjectComment(), opts) },
+    delete: { useMutation: (opts?: object) => withOpts(useDeleteProjectComment(), opts) },
   },
 
   notifications: {
@@ -382,5 +385,11 @@ export const trpc = {
         error: null,
       }),
     },
+  },
+
+  invites: {
+    list: { useQuery: () => useInvites() },
+    create: { useMutation: (opts?: object) => withOpts(useCreateInvite(), opts) },
+    delete: { useMutation: (opts?: object) => withOpts(useDeleteInvite(), opts) },
   },
 };

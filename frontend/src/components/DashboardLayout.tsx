@@ -20,7 +20,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { signInWithEmail, signUpWithEmail, signInWithGoogle } from "@/const";
+import { signInWithEmail, signInWithGoogle } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   Archive,
@@ -41,6 +41,7 @@ import {
 
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useOrg } from "@/contexts/OrgContext";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -51,7 +52,7 @@ const LOGO_URL = "https://d2xsxph8kpxj0f.cloudfront.net/310519663339590706/WvLXd
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: FolderKanban, label: "Rocks", path: "/projects" },
+  { icon: FolderKanban, label: "Projects", path: "/projects" },
   { icon: CheckSquare, label: "My To-Dos", path: "/my-tasks" },
   { icon: Megaphone, label: "Announcements", path: "/announcements" },
   { icon: CalendarDays, label: "Calendar", path: "/calendar" },
@@ -61,6 +62,10 @@ const menuItems = [
 
 const adminItems = [
   { icon: Shield, label: "Admin Panel", path: "/admin" },
+];
+
+const superAdminItems = [
+  { icon: Shield, label: "Super Admin", path: "/super-admin" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "academycompass-sidebar-width";
@@ -74,12 +79,39 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
   });
   const { loading, user } = useAuth();
+  const { org, loading: orgLoading } = useOrg();
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
   }, [sidebarWidth]);
 
-  if (loading) return <DashboardLayoutSkeleton />;
+  if (loading || orgLoading) return <DashboardLayoutSkeleton />;
+
+  if (!org) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex flex-col items-center gap-3 text-center p-8">
+          <p className="text-2xl font-bold">Organization not found</p>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            This URL doesn't match any organization. Check the address and try again.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (user && user.role !== "superadmin" && user.organizationId !== org.id) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex flex-col items-center gap-3 text-center p-8">
+          <p className="text-2xl font-bold">Access denied</p>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            Your account doesn't belong to this organization.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -135,7 +167,8 @@ function DashboardLayoutContent({
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+  const isSuperAdmin = user?.role === "superadmin";
 
   const activeLabel =
     [...menuItems, ...adminItems].find((item) => {
@@ -268,6 +301,7 @@ function DashboardLayoutContent({
                 )}
                 <SidebarMenu className="px-2 gap-0.5">
                   {adminItems.map((item) => <NavItem key={item.path} item={item} />)}
+                  {isSuperAdmin && superAdminItems.map((item) => <NavItem key={item.path} item={item} />)}
                 </SidebarMenu>
               </>
             )}
@@ -286,7 +320,11 @@ function DashboardLayoutContent({
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium truncate leading-none text-foreground">{user?.name || "User"}</p>
-                      {isAdmin && (
+                      {isSuperAdmin ? (
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-400/60 text-amber-500 shrink-0">
+                          Superadmin
+                        </Badge>
+                      ) : isAdmin && (
                         <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/40 text-primary shrink-0">
                           Admin
                         </Badge>
@@ -361,50 +399,20 @@ function DashboardLayoutContent({
 function EmailAuthForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [signupSuccess, setSignupSuccess] = useState(false);
 
   const handle = async () => {
     setError(null);
     setLoading(true);
     try {
-      if (mode === "signin") {
-        await signInWithEmail(email, password);
-      } else {
-        await signUpWithEmail(email, password);
-        setSignupSuccess(true);
-      }
+      await signInWithEmail(email, password);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
   };
-
-  if (signupSuccess) {
-    return (
-      <div className="flex flex-col items-center gap-4 py-2 text-center">
-        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-2xl">
-          ✉️
-        </div>
-        <div>
-          <p className="font-semibold text-foreground">Check your email</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            We sent a confirmation link to <span className="font-medium text-foreground">{email}</span>.
-            Click the link to activate your account.
-          </p>
-        </div>
-        <button
-          onClick={() => { setSignupSuccess(false); setMode("signin"); setPassword(""); }}
-          className="text-xs text-primary hover:underline"
-        >
-          Back to sign in
-        </button>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -450,14 +458,11 @@ function EmailAuthForm() {
       />
       {error && <p className="text-xs text-destructive">{error}</p>}
       <Button onClick={handle} disabled={loading} size="lg" className="w-full">
-        {loading ? "Loading…" : mode === "signin" ? "Sign in" : "Create account"}
+        {loading ? "Loading…" : "Sign in"}
       </Button>
-      <button
-        onClick={() => { setMode(m => m === "signin" ? "signup" : "signin"); setError(null); }}
-        className="text-xs text-muted-foreground hover:text-foreground text-center transition-colors"
-      >
-        {mode === "signin" ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
-      </button>
+      <p className="text-xs text-muted-foreground text-center">
+        Access is by invitation only. Contact your admin to get access.
+      </p>
     </div>
   );
 }

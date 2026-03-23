@@ -212,12 +212,12 @@ export const api = {
       patch(`/announcements/${id}/pin`, { isPinned }),
   },
 
-  // ── Rock Comments ─────────────────────────────────────────────────────────
-  rockComments: {
-    list: (projectId: number) => get(`/projects/${projectId}/rock-comments`),
+  // ── Project Comments ──────────────────────────────────────────────────────
+  projectComments: {
+    list: (projectId: number) => get(`/projects/${projectId}/project-comments`),
     create: (projectId: number, content: string) =>
-      post(`/projects/${projectId}/rock-comments`, { content }),
-    delete: (id: number) => del(`/rock-comments/${id}`),
+      post(`/projects/${projectId}/project-comments`, { content }),
+    delete: (id: number) => del(`/project-comments/${id}`),
   },
 
   // ── Notifications ─────────────────────────────────────────────────────────
@@ -237,6 +237,13 @@ export const api = {
     setWeeklyReportSchedule: (hour: number, minute: number) =>
       post("/notifications/weekly-report-schedule", { hour, minute }),
     sendWeeklyReportNow: () => post("/notifications/send-weekly-report"),
+  },
+
+  // ── Invites ───────────────────────────────────────────────────────────────
+  invites: {
+    list: () => get("/invites"),
+    create: (email: string, role: "user" | "admin") => post("/invites", { email, role }),
+    delete: (id: number) => del(`/invites/${id}`),
   },
 };
 

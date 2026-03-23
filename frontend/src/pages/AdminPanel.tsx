@@ -38,12 +38,15 @@ import {
   Eye,
   FolderKanban,
   Loader2,
+  Mail,
   Save,
   Shield,
   ShieldOff,
   Timer,
   UserCheck,
+  UserPlus,
   Users,
+  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -191,6 +194,23 @@ export default function AdminPanel() {
     onError: (e) => toast.error(e.message),
   });
 
+  // ── Invites ────────────────────────────────────────────────────────────────
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"user" | "admin">("user");
+  const { data: pendingInvites } = trpc.invites.list.useQuery();
+  const createInvite = trpc.invites.create.useMutation({
+    onSuccess: () => {
+      toast.success(`Invite sent to ${inviteEmail}`);
+      setInviteEmail("");
+      setInviteRole("user");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+  const deleteInvite = trpc.invites.delete.useMutation({
+    onSuccess: () => toast.success("Invite revoked"),
+    onError: (e: any) => toast.error(e.message),
+  });
+
   // Redirect non-admins
   if (user && user.role !== "admin") {
     return (
@@ -241,7 +261,7 @@ export default function AdminPanel() {
         {[
           { label: "Total Users", value: stats.users, icon: <Users className="h-5 w-5" />, color: "text-primary" },
           { label: "Admins", value: stats.admins, icon: <Shield className="h-5 w-5" />, color: "text-accent" },
-          { label: "Rocks", value: stats.projects, icon: <FolderKanban className="h-5 w-5" />, color: "text-blue-400" },
+          { label: "Projects", value: stats.projects, icon: <FolderKanban className="h-5 w-5" />, color: "text-blue-400" },
           { label: "Total Tasks", value: stats.tasks, icon: <CheckCircle2 className="h-5 w-5" />, color: "text-green-400" },
         ].map((s) => (
           <Card key={s.label} className="bg-card border-border/60">
@@ -253,6 +273,76 @@ export default function AdminPanel() {
           </Card>
         ))}
       </div>
+
+      {/* Invite Users */}
+      <Card className="bg-card border-border/60">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-primary" />
+            Invite Users
+          </CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Send an invite link by email. Users can only join via invite.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Invite form */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              className="flex-1 border rounded-lg px-3 py-2 text-sm bg-background"
+              placeholder="Email address"
+              type="email"
+              value={inviteEmail}
+              onChange={e => setInviteEmail(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && inviteEmail && createInvite.mutate({ email: inviteEmail, role: inviteRole })}
+            />
+            <Select value={inviteRole} onValueChange={v => setInviteRole(v as "user" | "admin")}>
+              <SelectTrigger className="w-32 h-9 text-sm bg-secondary border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="user">Member</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              className="gap-1.5 h-9"
+              disabled={!inviteEmail || createInvite.isPending}
+              onClick={() => createInvite.mutate({ email: inviteEmail, role: inviteRole })}
+            >
+              {createInvite.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+              Send Invite
+            </Button>
+          </div>
+
+          {/* Pending invites */}
+          {pendingInvites && pendingInvites.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pending Invites</p>
+              {(pendingInvites as any[]).map((inv: any) => (
+                <div key={inv.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-secondary/40 text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="truncate">{inv.email}</span>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+                      {inv.role === "admin" ? "Admin" : "Member"}
+                    </Badge>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive shrink-0"
+                    onClick={() => deleteInvite.mutate(inv.id)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* User management */}
       <Card className="bg-card border-border/60">
@@ -306,7 +396,7 @@ export default function AdminPanel() {
                       </div>
                       <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
                         {u.email && <span className="truncate max-w-48">{u.email}</span>}
-                        <span>{userProjects.length} rocks</span>
+                        <span>{userProjects.length} projects</span>
                         <span>{userTasks.length} tasks</span>
                       </div>
                     </div>
@@ -601,7 +691,7 @@ export default function AdminPanel() {
             Weekly Summary Report
           </CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            A Monday-morning digest covering Rock health (status breakdown + overdue milestones per Rock),
+            A Monday-morning digest covering Project health (status breakdown + overdue milestones per Project),
             To-Dos completed last week, still overdue, and newly created.
             Sent automatically every Monday at the configured time.
           </p>
@@ -696,7 +786,7 @@ export default function AdminPanel() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {roleChange?.newRole === "admin"
-                ? `Grant admin privileges to ${roleChange?.name}? They will have full access to all rocks, tasks, and user management.`
+                ? `Grant admin privileges to ${roleChange?.name}? They will have full access to all projects, tasks, and user management.`
                 : `Remove admin privileges from ${roleChange?.name}? They will only have regular user access.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -752,21 +842,21 @@ export default function AdminPanel() {
                 </p>
               </div>
 
-              {/* Grouped by Rock */}
+              {/* Grouped by Project */}
               <ScrollArea className="max-h-80">
                 <div className="space-y-3 pr-1">
-                  {previewData.rocks.map((rock) => (
-                    <div key={rock.rockName} className="rounded-lg border border-border overflow-hidden">
+                  {previewData.projects.map((project) => (
+                    <div key={project.projectName} className="rounded-lg border border-border overflow-hidden">
                       <div className="px-3 py-2 bg-muted/40 border-b border-border">
                         <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                          🪨 {rock.rockName}
+                          📁 {project.projectName}
                           <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 ml-auto">
-                            {rock.tasks.length}
+                            {project.tasks.length}
                           </Badge>
                         </p>
                       </div>
                       <div className="divide-y divide-border/50">
-                        {rock.tasks.map((t) => {
+                        {project.tasks.map((t) => {
                           const dueStr = t.dueDate
                             ? new Date(t.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
                             : null;

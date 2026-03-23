@@ -233,7 +233,7 @@ export default function TaskBottomSheet({
                 )}
               </div>
 
-              {/* Rock */}
+              {/* Project */}
               {projectName && (
                 <div className="flex items-center gap-2">
                   <Mountain className="h-4 w-4 text-primary shrink-0" />

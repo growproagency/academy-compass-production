@@ -10,6 +10,7 @@ import usersRouter from "./routes/users";
 import projectsRouter from "./routes/projects";
 import tasksRouter from "./routes/tasks";
 import orgsRouter from "./routes/orgs";
+import invitesRouter from "./routes/invites";
 import {
   subtasksRouter,
   commentsRouter,
@@ -17,7 +18,7 @@ import {
   dashboardRouter,
   strategicOrganizerRouter,
   announcementsRouter,
-  rockCommentsRouter,
+  projectCommentsRouter,
   notificationsRouter,
 } from "./routes/misc";
 
@@ -48,8 +49,9 @@ app.use("/api/milestones", milestonesRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/strategic-organizer", strategicOrganizerRouter);
 app.use("/api/announcements", announcementsRouter);
-app.use("/api/rock-comments", rockCommentsRouter);
+app.use("/api/project-comments", projectCommentsRouter);
 app.use("/api/notifications", notificationsRouter);
+app.use("/api/invites", invitesRouter);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => {

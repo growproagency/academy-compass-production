@@ -1,7 +1,7 @@
 // Shared types for the Academy Compass app
 
 export type UserRole = "user" | "admin";
-export type RockStatus = "on_track" | "off_track" | "assist" | "complete";
+export type ProjectStatus = "on_track" | "off_track" | "assist" | "complete";
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "low" | "medium" | "high";
 export type RecurrenceType = "none" | "daily" | "biweekly" | "weekly" | "monthly";
@@ -13,6 +13,7 @@ export interface User {
   email: string | null;
   loginMethod: string | null;
   role: UserRole;
+  organizationId: number | null;
   createdAt: string;
   updatedAt: string;
   lastSignedIn: string;
@@ -24,7 +25,7 @@ export interface Project {
   description: string | null;
   ownerId: number;
   dueDate: number | null;
-  rockStatus: RockStatus;
+  projectStatus: ProjectStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -113,7 +114,7 @@ export interface StrategicOrganizerVersion {
   createdAt: string;
 }
 
-export interface RockHealthSnapshot {
+export interface ProjectHealthSnapshot {
   id: number;
   snapshotDate: number;
   onTrack: number;
@@ -136,7 +137,7 @@ export interface Announcement {
   updatedAt: string;
 }
 
-export interface RockComment {
+export interface ProjectComment {
   id: number;
   projectId: number;
   authorId: number;

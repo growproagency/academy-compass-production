@@ -21,7 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-// TaskDialog removed — milestone quick-add is now inline on the Rock card
+// TaskDialog removed — milestone quick-add is now inline on the Project card
 import { trpc } from "@/lib/trpc";
 import {
   AlertCircle,
@@ -59,20 +59,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type RockStatus = "on_track" | "off_track" | "assist" | "complete";
+type ProjectStatus = "on_track" | "off_track" | "assist" | "complete";
 
 type Project = {
   id: number;
   name: string;
   description: string | null;
   dueDate?: number | null;
-  rockStatus?: RockStatus | null;
+  projectStatus?: ProjectStatus | null;
   ownerId: number;
   createdAt: Date;
 };
 
-const ROCK_STATUS_CONFIG: Record<
-  RockStatus,
+const PROJECT_STATUS_CONFIG: Record<
+  ProjectStatus,
   { label: string; color: string; bg: string; border: string; icon: React.ReactNode }
 > = {
   on_track: {
@@ -106,7 +106,7 @@ const ROCK_STATUS_CONFIG: Record<
 };
 
 /** Format a UTC ms timestamp as a human-readable date string */
-function formatRockDueDate(ts: number | null | undefined): string | null {
+function formatProjectDueDate(ts: number | null | undefined): string | null {
   if (!ts) return null;
   return new Date(ts).toLocaleDateString(undefined, {
     month: "short",
@@ -115,7 +115,7 @@ function formatRockDueDate(ts: number | null | undefined): string | null {
   });
 }
 
-function isRockOverdue(ts: number | null | undefined): boolean {
+function isProjectOverdue(ts: number | null | undefined): boolean {
   if (!ts) return false;
   return ts < Date.now();
 }
@@ -134,14 +134,14 @@ function ProjectFormDialog({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [dueDateStr, setDueDateStr] = useState(""); // "YYYY-MM-DD" from <input type="date">
-  const [rockStatus, setRockStatus] = useState<RockStatus | "">("on_track");
+  const [projectStatus, setProjectStatus] = useState<ProjectStatus | "">("on_track");
   const utils = trpc.useUtils();
 
   useEffect(() => {
     if (open) {
       setName(project?.name ?? "");
       setDescription(project?.description ?? "");
-      setRockStatus((project?.rockStatus as RockStatus) ?? "on_track");
+      setProjectStatus((project?.projectStatus as ProjectStatus) ?? "on_track");
       // Convert stored ms timestamp → "YYYY-MM-DD" for the date input
       if (project?.dueDate) {
         const d = new Date(project.dueDate);
@@ -157,7 +157,7 @@ function ProjectFormDialog({
 
   const create = trpc.projects.create.useMutation({
     onSuccess: () => {
-      toast.success("Rock created");
+      toast.success("Project created");
       utils.projects.list.invalidate();
       utils.projects.listWithStats.invalidate();
       onSuccess?.();
@@ -167,7 +167,7 @@ function ProjectFormDialog({
 
   const update = trpc.projects.update.useMutation({
     onSuccess: () => {
-      toast.success("Rock updated");
+      toast.success("Project updated");
       utils.projects.list.invalidate();
       utils.projects.listWithStats.invalidate();
       onSuccess?.();
@@ -191,14 +191,14 @@ function ProjectFormDialog({
         name: name.trim(),
         description: description.trim() || undefined,
         dueDate,
-        rockStatus: rockStatus || undefined,
+        projectStatus: projectStatus || undefined,
       });
     } else {
       create.mutate({
         name: name.trim(),
         description: description.trim() || undefined,
         dueDate,
-        rockStatus: rockStatus || undefined,
+        projectStatus: projectStatus || undefined,
       });
     }
   };
@@ -207,11 +207,11 @@ function ProjectFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md bg-card border-border">
         <DialogHeader>
-          <DialogTitle>{project ? "Edit Rock" : "New Rock"}</DialogTitle>
+          <DialogTitle>{project ? "Edit Project" : "New Project"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="proj-name">Rock Name *</Label>
+            <Label htmlFor="proj-name">Project Name *</Label>
             <Input
               id="proj-name"
               placeholder="e.g. Summer Belt Testing"
@@ -225,7 +225,7 @@ function ProjectFormDialog({
             <Label htmlFor="proj-desc">Description</Label>
             <Textarea
               id="proj-desc"
-              placeholder="What is this rock about?"
+              placeholder="What is this project about?"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
@@ -235,8 +235,8 @@ function ProjectFormDialog({
           <div className="space-y-1.5">
             <Label htmlFor="proj-status">Status</Label>
             <Select
-              value={rockStatus || "on_track"}
-              onValueChange={(v) => setRockStatus(v as RockStatus)}
+              value={projectStatus || "on_track"}
+              onValueChange={(v) => setProjectStatus(v as ProjectStatus)}
             >
               <SelectTrigger id="proj-status" className="bg-input">
                 <SelectValue placeholder="Select status" />
@@ -274,7 +274,7 @@ function ProjectFormDialog({
             </Button>
             <Button type="submit" disabled={isPending || !name.trim()}>
               {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {project ? "Save Changes" : "Create Rock"}
+              {project ? "Save Changes" : "Create Project"}
             </Button>
           </DialogFooter>
         </form>
@@ -350,7 +350,7 @@ export default function Projects() {
 
   const deleteMutation = trpc.projects.delete.useMutation({
     onSuccess: () => {
-      toast.success("Rock deleted");
+      toast.success("Project deleted");
       utils.projects.listWithStats.invalidate();
       utils.projects.list.invalidate();
       setDeleteProject(null);
@@ -366,14 +366,14 @@ export default function Projects() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Rocks</h1>
+          <h1 className="text-2xl font-bold">Projects</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {projects?.length ?? 0} rock{projects?.length !== 1 ? "s" : ""}
+            {projects?.length ?? 0} project{projects?.length !== 1 ? "s" : ""}
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)} className="gap-2">
           <Plus className="h-4 w-4" />
-          New Rock
+          New Project
         </Button>
       </div>
 
@@ -388,14 +388,14 @@ export default function Projects() {
             <FolderKanban className="h-8 w-8 text-muted-foreground" />
           </div>
           <div className="text-center">
-            <p className="font-semibold">No rocks yet</p>
+            <p className="font-semibold">No projects yet</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Create your first rock to get started
+              Create your first project to get started
             </p>
           </div>
           <Button onClick={() => setCreateOpen(true)} className="gap-2">
             <Plus className="h-4 w-4" />
-            Create Rock
+            Create Project
           </Button>
         </div>
       ) : (
@@ -410,10 +410,10 @@ export default function Projects() {
             const milestoneProgress =
               milestoneTotal > 0 ? Math.round((milestoneDone / milestoneTotal) * 100) : 0;
             const dueDate = (project as any).dueDate as number | null | undefined;
-            const overdue = isRockOverdue(dueDate);
-            const dueDateLabel = formatRockDueDate(dueDate);
-            const rockStatus = (project as any).rockStatus as RockStatus | null | undefined;
-            const statusCfg = rockStatus ? ROCK_STATUS_CONFIG[rockStatus] : null;
+            const overdue = isProjectOverdue(dueDate);
+            const dueDateLabel = formatProjectDueDate(dueDate);
+            const projectStatus = (project as any).projectStatus as ProjectStatus | null | undefined;
+            const statusCfg = projectStatus ? PROJECT_STATUS_CONFIG[projectStatus] : null;
 
             return (
               <Card
@@ -458,7 +458,7 @@ export default function Projects() {
                       {/* Quick-add milestone button in card header */}
                       <button
                         className="h-7 w-7 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-primary/10 hover:bg-primary/20 text-primary"
-                        title="Add milestone to this rock"
+                        title="Add milestone to this project"
                         onClick={(e) => {
                           e.stopPropagation();
                           setQuickMilestoneProjectId(project.id);
@@ -733,7 +733,7 @@ export default function Projects() {
                         }}
                       >
                         <Plus className="h-3 w-3" />
-                        Add milestone to this rock
+                        Add milestone to this project
                       </button>
                     </div>
                   )}
@@ -757,7 +757,7 @@ export default function Projects() {
         onSuccess={() => setEditProject(null)}
       />
 
-      {/* Milestone quick-add is now inline on each Rock card */}
+      {/* Milestone quick-add is now inline on each Project card */}
 
       <AlertDialog
         open={!!deleteProject}
@@ -765,11 +765,11 @@ export default function Projects() {
       >
         <AlertDialogContent className="bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Rock</AlertDialogTitle>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete{" "}
               <strong>"{deleteProject?.name}"</strong>? This will also delete
-              all tasks in this rock. This action cannot be undone.
+              all tasks in this project. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

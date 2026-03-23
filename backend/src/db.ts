@@ -19,10 +19,12 @@ import type {
   StrategicOrganizer,
   InsertStrategicOrganizer,
   StrategicOrganizerVersion,
-  RockHealthSnapshot,
+  ProjectHealthSnapshot,
   Announcement,
-  RockComment,
-  InsertRockComment,
+  ProjectComment,
+  InsertProjectComment,
+  Invite,
+  InsertInvite,
   RecurrenceType,
 } from "./types/dbTypes";
 
@@ -68,7 +70,7 @@ function mapProject(row: Record<string, unknown>): Project {
     ownerId: row.ownerId as number,
     organizationId: row.organizationId as number,
     dueDate: (row.dueDate as number) ?? null,
-    rockStatus: (row.rockStatus as Project["rockStatus"]) ?? "on_track",
+    projectStatus: (row.projectStatus as Project["projectStatus"]) ?? "on_track",
     createdAt: toDate(row.createdAt as string),
     updatedAt: toDate(row.updatedAt as string),
   };
@@ -149,7 +151,7 @@ function mapAnnouncement(row: Record<string, unknown>): Announcement {
   };
 }
 
-function mapRockComment(row: Record<string, unknown>): RockComment {
+function mapProjectComment(row: Record<string, unknown>): ProjectComment {
   return {
     id: row.id as number,
     projectId: row.projectId as number,
@@ -809,7 +811,7 @@ export async function getTasksForCalendar(
 
   return taskRows.map((t) => ({
     ...t,
-    projectName: t.projectId ? (projectNameMap.get(t.projectId) ?? "Unknown Rock") : "No Rock",
+    projectName: t.projectId ? (projectNameMap.get(t.projectId) ?? "Unknown Project") : "No Project",
     assigneeName: t.assigneeId ? (userNameMap.get(t.assigneeId) ?? null) : null,
   }));
 }
@@ -832,7 +834,7 @@ export async function getMilestonesForCalendar(userId: number, isAdmin: boolean,
   if (!milestoneRows || milestoneRows.length === 0) return [];
   return (milestoneRows as Array<Record<string, unknown>>).map((m) => ({
     ...mapMilestone(m),
-    projectName: projectNameMap.get(m.projectId as number) ?? "Unknown Rock",
+    projectName: projectNameMap.get(m.projectId as number) ?? "Unknown Project",
   }));
 }
 
@@ -988,9 +990,9 @@ export async function deleteStrategicOrganizerVersion(id: number): Promise<void>
   await supabase.from("strategic_organizer_versions").delete().eq("id", id);
 }
 
-// ─── Rock Health Snapshots ────────────────────────────────────────────────────
+// ─── Project Health Snapshots ─────────────────────────────────────────────────
 
-export async function saveRockHealthSnapshot(data: {
+export async function saveProjectHealthSnapshot(data: {
   organizationId: number;
   snapshotDate: number;
   onTrack: number;
@@ -1000,12 +1002,12 @@ export async function saveRockHealthSnapshot(data: {
   totalMilestones: number;
   doneMilestones: number;
 }): Promise<void> {
-  await supabase.from("rock_health_snapshots").insert({ ...data, createdAt: new Date().toISOString() });
+  await supabase.from("project_health_snapshots").insert({ ...data, createdAt: new Date().toISOString() });
 }
 
-export async function getRockHealthTrend(limit = 8, orgId: number): Promise<RockHealthSnapshot[]> {
+export async function getProjectHealthTrend(limit = 8, orgId: number): Promise<ProjectHealthSnapshot[]> {
   const { data } = await supabase
-    .from("rock_health_snapshots")
+    .from("project_health_snapshots")
     .select("*")
     .eq("organizationId", orgId)
     .order("snapshotDate", { ascending: false })
@@ -1024,35 +1026,35 @@ export async function getRockHealthTrend(limit = 8, orgId: number): Promise<Rock
   }));
 }
 
-// ─── Rock Comments ────────────────────────────────────────────────────────────
+// ─── Project Comments ─────────────────────────────────────────────────────────
 
-export async function getRockComments(projectId: number): Promise<Array<RockComment & { author: User | null }>> {
-  const { data: comments } = await supabase.from("rock_comments").select("*").eq("projectId", projectId).order("createdAt", { ascending: true });
+export async function getProjectComments(projectId: number): Promise<Array<ProjectComment & { author: User | null }>> {
+  const { data: comments } = await supabase.from("project_comments").select("*").eq("projectId", projectId).order("createdAt", { ascending: true });
   if (!comments || comments.length === 0) return [];
   const authorIds = Array.from(new Set((comments as Array<Record<string, unknown>>).map((c) => c.authorId as number)));
   const { data: userRows } = await supabase.from("users").select("*").in("id", authorIds);
   const userMap = new Map((userRows ?? []).map((u: Record<string, unknown>) => [u.id as number, mapUser(u)]));
   return (comments as Array<Record<string, unknown>>).map((c) => ({
-    ...mapRockComment(c),
+    ...mapProjectComment(c),
     author: userMap.get(c.authorId as number) ?? null,
   }));
 }
 
-export async function createRockComment(data: InsertRockComment): Promise<RockComment | null> {
+export async function createProjectComment(data: InsertProjectComment): Promise<ProjectComment | null> {
   const now = new Date().toISOString();
-  const { data: row, error } = await supabase.from("rock_comments").insert({ ...data, createdAt: now, updatedAt: now }).select().single();
+  const { data: row, error } = await supabase.from("project_comments").insert({ ...data, createdAt: now, updatedAt: now }).select().single();
   if (error || !row) return null;
-  return mapRockComment(row as Record<string, unknown>);
+  return mapProjectComment(row as Record<string, unknown>);
 }
 
-export async function deleteRockComment(id: number): Promise<void> {
-  await supabase.from("rock_comments").delete().eq("id", id);
+export async function deleteProjectComment(id: number): Promise<void> {
+  await supabase.from("project_comments").delete().eq("id", id);
 }
 
-export async function getRockCommentById(id: number): Promise<RockComment | null> {
-  const { data } = await supabase.from("rock_comments").select("*").eq("id", id).maybeSingle();
+export async function getProjectCommentById(id: number): Promise<ProjectComment | null> {
+  const { data } = await supabase.from("project_comments").select("*").eq("id", id).maybeSingle();
   if (!data) return null;
-  return mapRockComment(data as Record<string, unknown>);
+  return mapProjectComment(data as Record<string, unknown>);
 }
 
 // ─── Announcements ────────────────────────────────────────────────────────────
@@ -1088,16 +1090,16 @@ export async function deleteAnnouncement(id: number): Promise<void> {
 export async function getUserScorecard(targetUserId: number, orgId: number) {
   const targetUser = await getUserById(targetUserId);
   if (!targetUser) return null;
-  const ownedRocks = await listProjectsByOwner(targetUserId, orgId);
+  const ownedProjects = await listProjectsByOwner(targetUserId, orgId);
   const { data: memberRows } = await supabase.from("project_members").select("projectId").eq("userId", targetUserId);
   const memberProjectIds = (memberRows ?? []).map((r: Record<string, unknown>) => r.projectId as number);
-  let memberRocks: Project[] = [];
+  let memberProjects: Project[] = [];
   if (memberProjectIds.length > 0) {
     const { data: mProjects } = await supabase.from("projects").select("*").in("id", memberProjectIds).eq("organizationId", orgId);
-    memberRocks = (mProjects ?? []).map((r: Record<string, unknown>) => mapProject(r));
+    memberProjects = (mProjects ?? []).map((r: Record<string, unknown>) => mapProject(r));
   }
-  const ownedIds = new Set(ownedRocks.map((r) => r.id));
-  const allRocks = [...ownedRocks, ...memberRocks.filter((r) => !ownedIds.has(r.id))];
+  const ownedIds = new Set(ownedProjects.map((r) => r.id));
+  const allProjects = [...ownedProjects, ...memberProjects.filter((r) => !ownedIds.has(r.id))];
   const userTasks = await listAllTasks(targetUserId, false, orgId);
   const now = Date.now();
   const totalTasks = userTasks.length;
@@ -1105,9 +1107,9 @@ export async function getUserScorecard(targetUserId: number, orgId: number) {
   const overdueTasks = userTasks.filter((t) => t.status !== "done" && t.dueDate && t.dueDate < now).length;
   const taskCompletionRate = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : null;
   let milestoneOnTimeRate: number | null = null;
-  if (ownedRocks.length > 0) {
-    const { data: rockMilestones } = await supabase.from("milestones").select("*").in("projectId", ownedRocks.map((r) => r.id));
-    const completedMilestones = (rockMilestones ?? []).filter((m: Record<string, unknown>) => m.completedAt != null);
+  if (ownedProjects.length > 0) {
+    const { data: projectMilestones } = await supabase.from("milestones").select("*").in("projectId", ownedProjects.map((r) => r.id));
+    const completedMilestones = (projectMilestones ?? []).filter((m: Record<string, unknown>) => m.completedAt != null);
     const onTime = completedMilestones.filter((m: Record<string, unknown>) => !m.dueDate || (m.completedAt != null && (m.completedAt as number) <= (m.dueDate as number))).length;
     if (completedMilestones.length > 0) {
       milestoneOnTimeRate = Math.round((onTime / completedMilestones.length) * 100);
@@ -1117,18 +1119,66 @@ export async function getUserScorecard(targetUserId: number, orgId: number) {
   const recentActivity = (recentActivityRows ?? []).map((r: Record<string, unknown>) => mapTask(r));
   return {
     user: targetUser,
-    rocks: allRocks,
+    projects: allProjects,
     stats: {
       totalTasks,
       doneTasks,
       overdueTasks,
       taskCompletionRate,
       milestoneOnTimeRate,
-      totalRocks: allRocks.length,
-      ownedRocks: ownedRocks.length,
-      completeRocks: allRocks.filter((r) => r.rockStatus === "complete").length,
-      onTrackRocks: allRocks.filter((r) => r.rockStatus === "on_track").length,
+      totalProjects: allProjects.length,
+      ownedProjects: ownedProjects.length,
+      completeProjects: allProjects.filter((r) => r.projectStatus === "complete").length,
+      onTrackProjects: allProjects.filter((r) => r.projectStatus === "on_track").length,
     },
     recentActivity,
   };
+}
+
+// ─── Invites ──────────────────────────────────────────────────────────────────
+
+function mapInvite(row: Record<string, unknown>): Invite {
+  return {
+    id: row.id as number,
+    organizationId: row.organizationId as number,
+    email: row.email as string,
+    role: (row.role as Invite["role"]) ?? "user",
+    invitedBy: row.invitedBy as number,
+    acceptedAt: row.acceptedAt ? new Date(row.acceptedAt as string) : null,
+    createdAt: toDate(row.createdAt as string),
+  };
+}
+
+export async function createInvite(data: InsertInvite): Promise<Invite | null> {
+  const now = new Date().toISOString();
+  const { data: row, error } = await supabase
+    .from("invites")
+    .insert({ ...data, createdAt: now })
+    .select()
+    .single();
+  if (error || !row) return null;
+  return mapInvite(row as Record<string, unknown>);
+}
+
+export async function listInvites(orgId: number): Promise<Invite[]> {
+  const { data } = await supabase
+    .from("invites")
+    .select("*")
+    .eq("organizationId", orgId)
+    .is("acceptedAt", null)
+    .order("createdAt", { ascending: false });
+  return (data ?? []).map((r: Record<string, unknown>) => mapInvite(r));
+}
+
+export async function markInviteAccepted(email: string, orgId: number): Promise<void> {
+  await supabase
+    .from("invites")
+    .update({ acceptedAt: new Date().toISOString() })
+    .eq("email", email)
+    .eq("organizationId", orgId)
+    .is("acceptedAt", null);
+}
+
+export async function deleteInvite(id: number): Promise<void> {
+  await supabase.from("invites").delete().eq("id", id);
 }

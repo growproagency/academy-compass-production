@@ -42,7 +42,7 @@ const STATUS_ICON: Record<TaskStatus, React.ReactNode> = {
 
 const NAV_ITEMS = [
   { label: "Dashboard", path: "/", icon: <LayoutDashboard className="h-3.5 w-3.5" /> },
-  { label: "Rocks", path: "/projects", icon: <FolderKanban className="h-3.5 w-3.5" /> },
+  { label: "Projects", path: "/projects", icon: <FolderKanban className="h-3.5 w-3.5" /> },
   { label: "Archive", path: "/archive", icon: <Archive className="h-3.5 w-3.5" /> },
 ];
 

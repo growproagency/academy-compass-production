@@ -201,7 +201,7 @@ function EventDetailSheet({
                 </div>
               )}
               <div className="pt-3 border-t border-border">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Rock</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Project</p>
                 <p className="font-medium text-foreground">{event.projectName}</p>
               </div>
             </div>
@@ -248,7 +248,7 @@ function EventDetailSheet({
                 </div>
               )}
               <div className="pt-3 border-t border-border">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Rock</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Project</p>
                 <p className="font-medium text-foreground">{event.projectName}</p>
               </div>
             </div>
@@ -824,7 +824,7 @@ export default function Calendar() {
   const { data: rawTasks = [], isLoading: tasksLoading } = trpc.tasks.listForCalendar.useQuery();
   const { data: rawMilestones = [], isLoading: milestonesLoading } =
     trpc.milestones.listForCalendar.useQuery();
-  // Use the already-prefetched listWithStats data for the Rock filter dropdown
+  // Use the already-prefetched listWithStats data for the Project filter dropdown
   const { data: projects = [] } = trpc.projects.listWithStats.useQuery();
 
   const isLoading = tasksLoading || milestonesLoading;
@@ -873,13 +873,13 @@ export default function Calendar() {
               </span>
             </div>
 
-            {/* Rock filter */}
+            {/* Project filter */}
             <Select value={filterProject} onValueChange={setFilterProject}>
               <SelectTrigger className="h-8 text-xs w-36 bg-background">
-                <SelectValue placeholder="All Rocks" />
+                <SelectValue placeholder="All Projects" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Rocks</SelectItem>
+                <SelectItem value="all">All Projects</SelectItem>
                 {(projects as { id: number; name: string }[]).map((p) => (
                   <SelectItem key={p.id} value={String(p.id)}>
                     {p.name}

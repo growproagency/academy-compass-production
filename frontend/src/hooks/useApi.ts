@@ -37,7 +37,7 @@ export const QK = {
   strategicOrganizer: ["strategicOrganizer"] as const,
   strategicOrganizerVersions: ["strategicOrganizer", "versions"] as const,
   announcements: ["announcements"] as const,
-  rockComments: (pid: number) => ["rockComments", pid] as const,
+  projectComments: (pid: number) => ["projectComments", pid] as const,
   overdueCount: ["notifications", "overdueCount"] as const,
   schedule: ["notifications", "schedule"] as const,
   weeklySchedule: ["notifications", "weeklySchedule"] as const,
@@ -45,6 +45,7 @@ export const QK = {
   dueSoonCount: ["notifications", "dueSoonCount"] as const,
   previewDigest: ["notifications", "previewDigest"] as const,
   myTasks: ["users", "me", "tasks"] as const,
+  invites: ["invites"] as const,
 };
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -121,7 +122,7 @@ export function useCreateProject() {
     mutationFn: (data: Record<string, unknown>) => api.projects.create(data),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onSuccess: (newProject: any) => {
-      // Immediately add the new rock to both caches so the UI updates without waiting for a refetch
+      // Immediately add the new project to both caches so the UI updates without waiting for a refetch
       qc.setQueryData(QK.projects, (old: unknown) =>
         Array.isArray(old) ? [...old, newProject] : old
       );
@@ -165,7 +166,7 @@ export function useDeleteProject() {
   return useMutation({
     mutationFn: (id: number) => api.projects.delete(id),
     onSuccess: (_d, id) => {
-      // Immediately remove the deleted rock from both caches
+      // Immediately remove the deleted project from both caches
       const filter = (old: unknown) =>
         Array.isArray(old) ? old.filter((p: Record<string, unknown>) => p.id !== id) : old;
       qc.setQueryData(QK.projects, filter);
@@ -527,25 +528,25 @@ export function useDeleteAnnouncement() {
   });
 }
 
-// ── Rock Comments ─────────────────────────────────────────────────────────────
-export function useRockComments(projectId: number) {
-  return useQuery({ queryKey: QK.rockComments(projectId), queryFn: () => api.rockComments.list(projectId), enabled: !!projectId });
+// ── Project Comments ──────────────────────────────────────────────────────────
+export function useProjectComments(projectId: number) {
+  return useQuery({ queryKey: QK.projectComments(projectId), queryFn: () => api.projectComments.list(projectId), enabled: !!projectId });
 }
 
-export function useCreateRockComment() {
+export function useCreateProjectComment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ projectId, content }: { projectId: number; content: string }) =>
-      api.rockComments.create(projectId, content),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: QK.rockComments(v.projectId) }),
+      api.projectComments.create(projectId, content),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: QK.projectComments(v.projectId) }),
   });
 }
 
-export function useDeleteRockComment() {
+export function useDeleteProjectComment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, projectId }: { id: number; projectId: number }) => api.rockComments.delete(id),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: QK.rockComments(v.projectId) }),
+    mutationFn: ({ id, projectId }: { id: number; projectId: number }) => api.projectComments.delete(id),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: QK.projectComments(v.projectId) }),
   });
 }
 
@@ -572,4 +573,26 @@ export function usePreviewDigest() {
 
 export function useWeeklyReportSchedule() {
   return useQuery({ queryKey: QK.weeklySchedule, queryFn: () => api.notifications.getWeeklyReportSchedule() });
+}
+
+// ── Invites ───────────────────────────────────────────────────────────────────
+export function useInvites() {
+  return useQuery({ queryKey: QK.invites, queryFn: () => api.invites.list() });
+}
+
+export function useCreateInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ email, role }: { email: string; role: "user" | "admin" }) =>
+      api.invites.create(email, role),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.invites }),
+  });
+}
+
+export function useDeleteInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.invites.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.invites }),
+  });
 }
