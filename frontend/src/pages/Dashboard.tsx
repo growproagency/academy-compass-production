@@ -400,7 +400,7 @@ export default function Dashboard() {
           }`}
         >
           <Mountain className="h-4 w-4" />
-          Rocks
+          Projects
         </button>
         <button
           onClick={() => setView("todos")}
@@ -430,7 +430,7 @@ export default function Dashboard() {
                   <CardContent className="p-4">
                     <div className="flex items-center gap-2 mb-2 text-primary">
                       <Mountain className="h-5 w-5" />
-                      <span className="text-xs font-medium text-muted-foreground">Total Rocks</span>
+                      <span className="text-xs font-medium text-muted-foreground">Total Projects</span>
                     </div>
                     <p className="text-2xl font-bold">{rocksWithStats?.length ?? 0}</p>
                   </CardContent>
@@ -458,7 +458,7 @@ export default function Dashboard() {
                     <p className="text-2xl font-bold">
                       {rocksWithStats?.filter((r) => (r as any).rockStatus === "on_track").length ?? 0}
                       <span className="text-sm font-normal text-muted-foreground ml-1">
-                        / {rocksWithStats?.length ?? 0} Rocks
+                        / {rocksWithStats?.length ?? 0} Projects
                       </span>
                     </p>
                   </CardContent>
@@ -492,7 +492,7 @@ export default function Dashboard() {
                       </p>
                       {totalOverdueMilestones > 0 && (
                         <p className="text-xs text-destructive/70 mt-0.5">
-                          across {rocksWithOverdueMilestones} Rock{rocksWithOverdueMilestones !== 1 ? "s" : ""}
+                          across {rocksWithOverdueMilestones} Project{rocksWithOverdueMilestones !== 1 ? "s" : ""}
                         </p>
                       )}
                       {totalOverdueMilestones === 0 && (
@@ -666,13 +666,13 @@ export default function Dashboard() {
           ) : !rocksWithStats || rocksWithStats.length === 0 ? (
             <Card className="p-12 text-center">
               <Mountain className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="font-semibold text-muted-foreground">No Rocks yet</p>
+              <p className="font-semibold text-muted-foreground">No Projects yet</p>
               <p className="text-sm text-muted-foreground/70 mt-1 mb-4">
-                Rocks are your 7–14 week strategic goals. Each Rock contains Milestones and To-Dos.
+                Projects are your 7–14 week strategic goals. Each Project contains Milestones and To-Dos.
               </p>
               <Button onClick={() => setLocation("/projects")}>
                 <Plus className="h-4 w-4 mr-2" />
-                Create your first Rock
+                Create your first Project
               </Button>
             </Card>
           ) : (
@@ -791,7 +791,7 @@ export default function Dashboard() {
           {rocksWithStats && rocksWithStats.length > 0 && (
             <Button variant="outline" size="sm" className="gap-2" onClick={() => setLocation("/projects")}>
               <FolderKanban className="h-4 w-4" />
-              Manage all Rocks
+              Manage all Projects
             </Button>
           )}
         </div>
@@ -847,10 +847,10 @@ export default function Dashboard() {
             </div>
             <Select value={filterProject} onValueChange={setFilterProject}>
               <SelectTrigger className="w-32 sm:w-40 h-8 text-xs bg-secondary border-border">
-                <SelectValue placeholder="All Rocks" />
+                <SelectValue placeholder="All Projects" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Rocks</SelectItem>
+                <SelectItem value="all">All Projects</SelectItem>
                 {(rocksWithStats ?? []).map((p: any) => (
                   <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
                 ))}

@@ -876,10 +876,10 @@ export default function Calendar() {
             {/* Rock filter */}
             <Select value={filterProject} onValueChange={setFilterProject}>
               <SelectTrigger className="h-8 text-xs w-36 bg-background">
-                <SelectValue placeholder="All Rocks" />
+                <SelectValue placeholder="All Projects" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Rocks</SelectItem>
+                <SelectItem value="all">All Projects</SelectItem>
                 {(projects as { id: number; name: string }[]).map((p) => (
                   <SelectItem key={p.id} value={String(p.id)}>
                     {p.name}
