@@ -353,9 +353,9 @@ function AnnouncementCard({
           {isAdmin && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+                <button className="h-7 w-7 shrink-0 inline-flex items-center justify-center rounded-md hover:bg-accent transition-colors">
                   <MoreVertical className="h-4 w-4" />
-                </Button>
+                </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={onTogglePin} className="gap-2">
