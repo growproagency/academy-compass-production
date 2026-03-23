@@ -1,4 +1,3 @@
-import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -135,11 +134,10 @@ function AnnouncementForm({
 }
 
 export default function Announcements() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
   const utils = trpc.useUtils();
 
-  const { data: announcements, isLoading } = trpc.announcements.list.useQuery();
+  const { data: announcementsRaw, isLoading } = trpc.announcements.list.useQuery();
+  const announcements = announcementsRaw as Announcement[] | undefined;
 
   const createMutation = trpc.announcements.create.useMutation({
     onSuccess: () => { utils.announcements.list.invalidate(); setCreateOpen(false); toast.success("Announcement posted."); },
@@ -181,12 +179,10 @@ export default function Announcements() {
             School-wide news, schedule changes, and upcoming events
           </p>
         </div>
-        {isAdmin && (
-          <Button size="sm" className="gap-2 shrink-0" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Post
-          </Button>
-        )}
+        <Button size="sm" className="gap-2 shrink-0" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4" />
+          Post
+        </Button>
       </div>
 
       {/* Loading */}
@@ -202,12 +198,10 @@ export default function Announcements() {
           <CardContent className="py-16 text-center">
             <Megaphone className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
             <p className="text-muted-foreground text-sm">No announcements yet.</p>
-            {isAdmin && (
-              <Button size="sm" className="mt-4 gap-2" onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4" />
-                Post the first announcement
-              </Button>
-            )}
+            <Button size="sm" className="mt-4 gap-2" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Post the first announcement
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -222,7 +216,6 @@ export default function Announcements() {
             <AnnouncementCard
               key={a.id}
               announcement={a}
-              isAdmin={isAdmin}
               onEdit={() => setEditTarget(a)}
               onDelete={() => setDeleteTarget(a)}
               onTogglePin={() => togglePinMutation.mutate({ id: a.id, isPinned: !a.isPinned })}
@@ -241,7 +234,6 @@ export default function Announcements() {
             <AnnouncementCard
               key={a.id}
               announcement={a}
-              isAdmin={isAdmin}
               onEdit={() => setEditTarget(a)}
               onDelete={() => setDeleteTarget(a)}
               onTogglePin={() => togglePinMutation.mutate({ id: a.id, isPinned: !a.isPinned })}
@@ -307,13 +299,11 @@ export default function Announcements() {
 
 function AnnouncementCard({
   announcement: a,
-  isAdmin,
   onEdit,
   onDelete,
   onTogglePin,
 }: {
   announcement: Announcement;
-  isAdmin: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onTogglePin: () => void;
@@ -350,27 +340,25 @@ function AnnouncementCard({
               )}
             </div>
           </div>
-          {isAdmin && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onTogglePin} className="gap-2">
-                  {a.isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-                  {a.isPinned ? "Unpin" : "Pin to top"}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onEdit} className="gap-2">
-                  <Pencil className="h-4 w-4" /> Edit
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onDelete} className="gap-2 text-destructive focus:text-destructive">
-                  <Trash2 className="h-4 w-4" /> Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="h-7 w-7 shrink-0 inline-flex items-center justify-center rounded-md hover:bg-accent transition-colors">
+                <MoreVertical className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onTogglePin} className="gap-2">
+                {a.isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                {a.isPinned ? "Unpin" : "Pin to top"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onEdit} className="gap-2">
+                <Pencil className="h-4 w-4" /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onDelete} className="gap-2 text-destructive focus:text-destructive">
+                <Trash2 className="h-4 w-4" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </CardContent>
     </Card>

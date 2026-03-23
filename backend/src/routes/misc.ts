@@ -163,24 +163,24 @@ announcementsRouter.get("/", async (_req, res) => {
   res.json(await listAnnouncements());
 });
 
-announcementsRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
+announcementsRouter.post("/", requireAuth, async (req, res) => {
   const user = (req as any).user;
   const { title, body, isPinned, expiresAt } = req.body;
   res.status(201).json(await createAnnouncement({ title, body, isPinned: isPinned ?? false, authorId: user.id, expiresAt: expiresAt ?? null }));
 });
 
-announcementsRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
+announcementsRouter.patch("/:id", requireAuth, async (req, res) => {
   await updateAnnouncement(Number(req.params.id), req.body);
   res.json({ success: true });
 });
 
-announcementsRouter.patch("/:id/pin", requireAuth, requireAdmin, async (req, res) => {
+announcementsRouter.patch("/:id/pin", requireAuth, async (req, res) => {
   const { isPinned } = req.body;
   await updateAnnouncement(Number(req.params.id), { isPinned });
   res.json({ success: true });
 });
 
-announcementsRouter.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
+announcementsRouter.delete("/:id", requireAuth, async (req, res) => {
   await deleteAnnouncement(Number(req.params.id));
   res.json({ success: true });
 });
