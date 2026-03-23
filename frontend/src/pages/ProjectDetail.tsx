@@ -352,8 +352,8 @@ export default function ProjectDetail() {
   if (!project) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
-        <p className="text-muted-foreground">Rock not found</p>
-        <Button onClick={() => setLocation("/projects")}>Back to Rocks</Button>
+        <p className="text-muted-foreground">Project not found</p>
+        <Button onClick={() => setLocation("/projects")}>Back to Projects</Button>
       </div>
     );
   }

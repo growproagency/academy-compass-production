@@ -148,7 +148,7 @@ export default function MemberScorecard() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard
           icon={Target}
-          label="Rocks"
+          label="Projects"
           value={stats.totalRocks}
           sub={`${stats.ownedRocks} owned`}
           color="bg-indigo-100"
@@ -201,7 +201,7 @@ export default function MemberScorecard() {
       {rocks.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-            <Target className="h-4 w-4" /> Rocks ({rocks.length})
+            <Target className="h-4 w-4" /> Projects ({rocks.length})
           </h2>
           <div className="space-y-2">
             {rocks.map((rock) => (
@@ -255,7 +255,7 @@ export default function MemberScorecard() {
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
             <User className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-            <p className="text-muted-foreground text-sm">No Rocks or To-Dos assigned yet.</p>
+            <p className="text-muted-foreground text-sm">No Projects or To-Dos assigned yet.</p>
           </CardContent>
         </Card>
       )}

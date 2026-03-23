@@ -122,7 +122,7 @@ export default function Profile() {
               <div className="flex items-center gap-4 mt-3 flex-wrap">
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <FolderKanban className="h-4 w-4 text-primary" />
-                  <span>{projects?.length ?? 0} Rocks</span>
+                  <span>{projects?.length ?? 0} Projects</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <CheckCircle2 className="h-4 w-4 text-green-400" />
@@ -209,12 +209,12 @@ export default function Profile() {
 
         {/* Projects sidebar */}
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold">My Rocks</h2>
+          <h2 className="text-lg font-semibold">My Projects</h2>
           <div className="space-y-2">
             {projects?.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-32 gap-2 bg-secondary/20 rounded-xl border border-border/40">
                 <FolderKanban className="h-6 w-6 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">No rocks yet</p>
+                <p className="text-sm text-muted-foreground">No projects yet</p>
               </div>
             ) : (
               projects?.map((project) => {
