@@ -5,8 +5,8 @@ import { getOrgBySlug } from "../db";
  * Resolves the organization from the request.
  *
  * Strategy:
- *  1. Read the `Host` header and extract the subdomain (e.g. "school" from "school.app.com")
- *  2. Fall back to the `X-Org-Slug` header (used for local dev / testing)
+ *  1. Read the `X-Org-Slug` header (sent by the frontend in all environments)
+ *  2. Fall back to subdomain from the `Host` header (e.g. "school" from "school.app.com")
  *  3. Look up the org in the DB and attach it to `req.org`
  *
  * This middleware is non-blocking — if no org is found, `req.org` is null.
@@ -16,20 +16,19 @@ export async function orgMiddleware(req: Request, _res: Response, next: NextFunc
   try {
     let slug: string | null = null;
 
-    // 1. Try to extract subdomain from Host header
-    const host = req.headers.host ?? "";
-    const hostWithoutPort = host.split(":")[0];
-    const parts = hostWithoutPort.split(".");
-    // Only treat as subdomain if there are 3+ parts (e.g. school.app.com)
-    if (parts.length >= 3) {
-      slug = parts[0];
+    // 1. Prefer X-Org-Slug header (sent by frontend in all environments)
+    const headerSlug = req.headers["x-org-slug"];
+    if (typeof headerSlug === "string" && headerSlug.trim()) {
+      slug = headerSlug.trim();
     }
 
-    // 2. Fall back to X-Org-Slug header (for local dev / API testing)
+    // 2. Fall back to subdomain from Host header (e.g. "school" from "school.app.com")
     if (!slug) {
-      const headerSlug = req.headers["x-org-slug"];
-      if (typeof headerSlug === "string" && headerSlug.trim()) {
-        slug = headerSlug.trim();
+      const host = req.headers.host ?? "";
+      const hostWithoutPort = host.split(":")[0];
+      const parts = hostWithoutPort.split(".");
+      if (parts.length >= 3) {
+        slug = parts[0];
       }
     }
 

@@ -23,6 +23,7 @@ import AuthCallback from "./pages/AuthCallback";
 import SetPassword from "./pages/SetPassword";
 import { CommandPalette } from "./components/CommandPalette";
 
+
 function Router() {
   return (
     <Switch>
