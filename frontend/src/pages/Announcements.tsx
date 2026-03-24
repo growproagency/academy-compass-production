@@ -171,12 +171,10 @@ export default function Announcements() {
             School-wide news, schedule changes, and upcoming events
           </p>
         </div>
-        {isAdmin && (
-          <Button size="sm" className="gap-2 shrink-0" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Post
-          </Button>
-        )}
+        <Button size="sm" className="gap-2 shrink-0" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4" />
+          Post
+        </Button>
       </div>
 
       {/* Loading */}
@@ -192,12 +190,10 @@ export default function Announcements() {
           <CardContent className="py-16 text-center">
             <Megaphone className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
             <p className="text-muted-foreground text-sm">No announcements yet.</p>
-            {isAdmin && (
-              <Button size="sm" className="mt-4 gap-2" onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4" />
-                Post the first announcement
-              </Button>
-            )}
+            <Button size="sm" className="mt-4 gap-2" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Post the first announcement
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -212,7 +208,6 @@ export default function Announcements() {
             <AnnouncementCard
               key={a.id}
               announcement={a}
-              isAdmin={isAdmin}
               onEdit={() => setEditTarget(a)}
               onDelete={() => setDeleteTarget(a)}
               onTogglePin={() => togglePinMutation.mutate(
@@ -234,7 +229,6 @@ export default function Announcements() {
             <AnnouncementCard
               key={a.id}
               announcement={a}
-              isAdmin={isAdmin}
               onEdit={() => setEditTarget(a)}
               onDelete={() => setDeleteTarget(a)}
               onTogglePin={() => togglePinMutation.mutate(
@@ -313,13 +307,11 @@ export default function Announcements() {
 
 function AnnouncementCard({
   announcement: a,
-  isAdmin,
   onEdit,
   onDelete,
   onTogglePin,
 }: {
   announcement: Announcement;
-  isAdmin: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onTogglePin: () => void;

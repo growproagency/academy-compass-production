@@ -185,13 +185,13 @@ announcementsRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) =>
   }
 });
 
-announcementsRouter.patch("/:id/pin", requireAuth, requireAdmin, async (req, res) => {
+announcementsRouter.patch("/:id/pin", requireAuth, async (req, res) => {
   const { isPinned } = req.body;
   await updateAnnouncement(Number(req.params.id), { isPinned });
   res.json({ success: true });
 });
 
-announcementsRouter.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
+announcementsRouter.delete("/:id", requireAuth, async (req, res) => {
   await deleteAnnouncement(Number(req.params.id));
   res.json({ success: true });
 });
