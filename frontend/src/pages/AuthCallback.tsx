@@ -6,10 +6,18 @@ export default function AuthCallback() {
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    // Supabase automatically picks up the token from the URL hash/query.
-    // We just wait for the session to be established then redirect home.
+    // Parse the URL hash — Supabase puts access_token and type here for invite links
+    const hash = window.location.hash;
+    const params = new URLSearchParams(hash.replace("#", "?"));
+    const type = params.get("type");
+
     supabase.auth.getSession().then(() => {
-      navigate("/");
+      // Invited users need to set a password before entering the app
+      if (type === "invite") {
+        navigate("/set-password");
+      } else {
+        navigate("/");
+      }
     });
   }, [navigate]);
 

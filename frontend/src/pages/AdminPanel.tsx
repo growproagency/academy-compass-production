@@ -28,7 +28,24 @@ import {
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getUserInitials } from "@/lib/taskHelpers";
-import { trpc } from "@/lib/trpc";
+import {
+  useUsers,
+  useProjects,
+  useTasks,
+  useOverdueCount,
+  useDueSoonCount,
+  useNotificationSchedule,
+  useReminderWindow,
+  useWeeklyReportSchedule,
+  usePreviewDigest,
+  useUpdateUserRole,
+  useInviteLinks,
+  useCreateInviteLink,
+  useDeleteInviteLink,
+  QK,
+} from "@/hooks/useApi";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import {
   AlertTriangle,
   Bell,
@@ -38,12 +55,16 @@ import {
   Eye,
   FolderKanban,
   Loader2,
+  Copy,
+  Link,
   Save,
   Shield,
   ShieldOff,
   Timer,
   UserCheck,
+  UserPlus,
   Users,
+  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -68,7 +89,7 @@ export default function AdminPanel() {
   const [, setLocation] = useLocation();
   const [roleChange, setRoleChange] = useState<{ id: number; name: string; newRole: "admin" | "user" } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const utils = trpc.useUtils();
+  const qc = useQueryClient();
 
   // Schedule picker local state
   const [scheduleHour, setScheduleHour] = useState<number>(8);
@@ -84,19 +105,16 @@ export default function AdminPanel() {
   const [weeklyMinute, setWeeklyMinute] = useState<number>(0);
   const [weeklyDirty, setWeeklyDirty] = useState(false);
 
-  const { data: users, isLoading } = trpc.users.list.useQuery();
-  const { data: projects } = trpc.projects.list.useQuery();
-  const { data: allTasks } = trpc.tasks.listAll.useQuery();
+  const { data: users, isLoading } = useUsers();
+  const { data: projects } = useProjects();
+  const { data: allTasks } = useTasks();
 
-  const { data: overdueData } = trpc.notifications.overdueCount.useQuery();
-  const { data: dueSoonData } = trpc.notifications.dueSoonCount.useQuery();
-  const { data: scheduleData } = trpc.notifications.getSchedule.useQuery();
-  const { data: reminderWindowData } = trpc.notifications.getReminderWindow.useQuery();
-  const { data: weeklyScheduleData } = trpc.notifications.getWeeklyReportSchedule.useQuery();
-  const { data: previewData, isLoading: previewLoading } = trpc.notifications.previewDigest.useQuery(
-    undefined,
-    { enabled: previewOpen }
-  );
+  const { data: overdueData } = useOverdueCount();
+  const { data: dueSoonData } = useDueSoonCount();
+  const { data: scheduleData } = useNotificationSchedule();
+  const { data: reminderWindowData } = useReminderWindow();
+  const { data: weeklyScheduleData } = useWeeklyReportSchedule();
+  const { data: previewData, isLoading: previewLoading } = usePreviewDigest();
 
   // Sync schedule from server on first load
   useEffect(() => {
@@ -124,75 +142,67 @@ export default function AdminPanel() {
     }
   }, [weeklyScheduleData]);
 
-  const sendDigest = trpc.notifications.sendDailyDigest.useMutation({
-    onSuccess: (res) => {
-      if (res.sent) {
-        toast.success(`Daily digest sent — ${res.count} overdue task${res.count !== 1 ? "s" : ""} reported.`);
-      } else {
-        toast.info(res.reason ?? "Digest not sent.");
-      }
-    },
-    onError: (e) => toast.error(e.message),
+  const sendDigest = useMutation({
+    mutationFn: () => api.notifications.sendDailyDigest(),
   });
 
-  const sendDueRemindersNow = trpc.notifications.sendDueRemindersNow.useMutation({
-    onSuccess: (res) => {
-      if (res.sent > 0) {
-        toast.success(`Sent ${res.sent} due-date reminder${res.sent !== 1 ? "s" : ""}. ${res.skipped > 0 ? `${res.skipped} already notified today.` : ""}`);
-      } else if (res.skipped > 0) {
-        toast.info(`All ${res.skipped} due-soon task${res.skipped !== 1 ? "s" : ""} already notified today.`);
-      } else {
-        toast.info(`No tasks due within ${reminderWindowHours}h.`);
-      }
-      utils.notifications.dueSoonCount.invalidate();
-    },
-    onError: (e) => toast.error(e.message),
+  const sendDueRemindersNow = useMutation({
+    mutationFn: () => api.notifications.sendDueRemindersNow(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.dueSoonCount }),
   });
 
-  const setReminderWindow = trpc.notifications.setReminderWindow.useMutation({
-    onSuccess: (res) => {
-      toast.success(`Reminder window updated to ${res.hours} hour${res.hours !== 1 ? "s" : ""}.`);
-      utils.notifications.getReminderWindow.invalidate();
-      utils.notifications.dueSoonCount.invalidate();
-      setReminderWindowDirty(false);
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const setSchedule = trpc.notifications.setSchedule.useMutation({
-    onSuccess: (res) => {
-      toast.success(`Digest schedule updated to ${formatTime(res.hour, res.minute)} daily.`);
-      utils.notifications.getSchedule.invalidate();
-      setScheduleDirty(false);
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const setWeeklySchedule = trpc.notifications.setWeeklyReportSchedule.useMutation({
-    onSuccess: (res) => {
-      toast.success(`Weekly report schedule updated to ${formatTime(res.hour, res.minute)} on Mondays.`);
-      utils.notifications.getWeeklyReportSchedule.invalidate();
-      setWeeklyDirty(false);
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const sendWeeklyReportNow = trpc.notifications.sendWeeklyReportNow.useMutation({
-    onSuccess: () => toast.success("Weekly summary report sent!"),
-    onError: (e) => toast.error(e.message),
-  });
-
-  const updateRole = trpc.users.updateRole.useMutation({
+  const setReminderWindow = useMutation({
+    mutationFn: ({ hours }: { hours: number }) => api.notifications.setReminderWindow(hours),
     onSuccess: () => {
-      toast.success("Role updated");
-      utils.users.list.invalidate();
-      setRoleChange(null);
+      qc.invalidateQueries({ queryKey: QK.reminderWindow });
+      qc.invalidateQueries({ queryKey: QK.dueSoonCount });
     },
-    onError: (e) => toast.error(e.message),
   });
+
+  const setSchedule = useMutation({
+    mutationFn: ({ hour, minute }: { hour: number; minute: number }) => api.notifications.setSchedule(hour, minute),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.schedule }),
+  });
+
+  const setWeeklySchedule = useMutation({
+    mutationFn: ({ hour, minute }: { hour: number; minute: number }) => api.notifications.setWeeklyReportSchedule(hour, minute),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.weeklySchedule }),
+  });
+
+  const sendWeeklyReportNow = useMutation({
+    mutationFn: () => api.notifications.sendWeeklyReportNow(),
+  });
+
+  const updateRole = useUpdateUserRole();
+
+  // ── Invite Links ───────────────────────────────────────────────────────────
+  const [inviteRole, setInviteRole] = useState<"user" | "admin">("user");
+  const [generatedLink, setGeneratedLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const { data: inviteLinks } = useInviteLinks();
+  const createInviteLink = useCreateInviteLink();
+  const deleteInviteLink = useDeleteInviteLink();
+
+  const handleGenerateLink = () => {
+    createInviteLink.mutate({ role: inviteRole }, {
+      onSuccess: (data: any) => {
+        const url = `${window.location.origin}/invite/${data.token}`;
+        setGeneratedLink(url);
+        toast.success("Invite link generated");
+      },
+      onError: (e: any) => toast.error(e.message),
+    });
+  };
+
+  const handleCopy = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    toast.success("Link copied to clipboard");
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   // Redirect non-admins
-  if (user && user.role !== "admin") {
+  if (user && user.role !== "admin" && user.role !== "superadmin") {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         <Shield className="h-12 w-12 text-muted-foreground/40" />
@@ -253,6 +263,102 @@ export default function AdminPanel() {
           </Card>
         ))}
       </div>
+
+      {/* Invite Users */}
+      <Card className="bg-card border-border/60">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-primary" />
+            Invite Users
+          </CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Generate a signup link and share it directly. No email required.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Link generator */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Select value={inviteRole} onValueChange={v => setInviteRole(v as "user" | "admin")}>
+              <SelectTrigger className="w-36 h-9 text-sm bg-secondary border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="user">Member</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              className="gap-1.5 h-9"
+              disabled={createInviteLink.isPending}
+              onClick={handleGenerateLink}
+            >
+              {createInviteLink.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link className="h-3.5 w-3.5" />}
+              Generate Link
+            </Button>
+          </div>
+
+          {/* Generated link display */}
+          {generatedLink && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20">
+              <span className="text-xs text-muted-foreground truncate flex-1 font-mono">{generatedLink}</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 gap-1.5 shrink-0 text-primary hover:text-primary"
+                onClick={() => handleCopy(generatedLink)}
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {copied ? "Copied!" : "Copy"}
+              </Button>
+            </div>
+          )}
+
+          {/* Active invite links */}
+          {inviteLinks && (inviteLinks as any[]).length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Active Links</p>
+              {(inviteLinks as any[]).map((link: any) => {
+                const url = `${window.location.origin}/invite/${link.token}`;
+                return (
+                  <div key={link.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-secondary/40 text-sm">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Link className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="truncate font-mono text-xs text-muted-foreground">{link.token}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+                        {link.role === "admin" ? "Admin" : "Member"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-primary"
+                        onClick={() => handleCopy(url)}
+                        title="Copy link"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteInviteLink.mutate(link.id, {
+                          onSuccess: () => toast.success("Link revoked"),
+                          onError: (e: any) => toast.error(e.message),
+                        })}
+                        title="Revoke link"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* User management */}
       <Card className="bg-card border-border/60">
@@ -391,7 +497,16 @@ export default function AdminPanel() {
                 Preview
               </Button>
               <Button
-                onClick={() => sendDigest.mutate()}
+                onClick={() => sendDigest.mutate(undefined, {
+                  onSuccess: (res: any) => {
+                    if (res.sent) {
+                      toast.success(`Daily digest sent — ${res.count} overdue task${res.count !== 1 ? "s" : ""} reported.`);
+                    } else {
+                      toast.info(res.reason ?? "Digest not sent.");
+                    }
+                  },
+                  onError: (e: any) => toast.error(e.message),
+                })}
                 disabled={sendDigest.isPending}
                 className="gap-2 flex-1 sm:flex-none"
               >
@@ -470,7 +585,16 @@ export default function AdminPanel() {
                   size="sm"
                   className="gap-1.5 h-9"
                   disabled={!scheduleDirty || setSchedule.isPending}
-                  onClick={() => setSchedule.mutate({ hour: scheduleHour, minute: scheduleMinute })}
+                  onClick={() => setSchedule.mutate(
+                { hour: scheduleHour, minute: scheduleMinute },
+                {
+                  onSuccess: (res: any) => {
+                    toast.success(`Digest schedule updated to ${formatTime(res.hour, res.minute)} daily.`);
+                    setScheduleDirty(false);
+                  },
+                  onError: (e: any) => toast.error(e.message),
+                }
+              )}
                 >
                   {setSchedule.isPending ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -528,7 +652,18 @@ export default function AdminPanel() {
               </p>
             </div>
             <Button
-              onClick={() => sendDueRemindersNow.mutate()}
+              onClick={() => sendDueRemindersNow.mutate(undefined, {
+                onSuccess: (res: any) => {
+                  if (res.sent > 0) {
+                    toast.success(`Sent ${res.sent} due-date reminder${res.sent !== 1 ? "s" : ""}. ${res.skipped > 0 ? `${res.skipped} already notified today.` : ""}`);
+                  } else if (res.skipped > 0) {
+                    toast.info(`All ${res.skipped} due-soon task${res.skipped !== 1 ? "s" : ""} already notified today.`);
+                  } else {
+                    toast.info(`No tasks due within ${reminderWindowHours}h.`);
+                  }
+                },
+                onError: (e: any) => toast.error(e.message),
+              })}
               disabled={sendDueRemindersNow.isPending}
               variant="outline"
               className="gap-2 sm:shrink-0"
@@ -579,7 +714,16 @@ export default function AdminPanel() {
                 size="sm"
                 className="gap-1.5 h-9 shrink-0"
                 disabled={!reminderWindowDirty || setReminderWindow.isPending}
-                onClick={() => setReminderWindow.mutate({ hours: reminderWindowHours })}
+                onClick={() => setReminderWindow.mutate(
+                  { hours: reminderWindowHours },
+                  {
+                    onSuccess: (res: any) => {
+                      toast.success(`Reminder window updated to ${res.hours} hour${res.hours !== 1 ? "s" : ""}.`);
+                      setReminderWindowDirty(false);
+                    },
+                    onError: (e: any) => toast.error(e.message),
+                  }
+                )}
               >
                 {setReminderWindow.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -601,7 +745,7 @@ export default function AdminPanel() {
             Weekly Summary Report
           </CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            A Monday-morning digest covering Rock health (status breakdown + overdue milestones per Rock),
+            A Monday-morning digest covering Project health (status breakdown + overdue milestones per Project),
             To-Dos completed last week, still overdue, and newly created.
             Sent automatically every Monday at the configured time.
           </p>
@@ -616,7 +760,10 @@ export default function AdminPanel() {
               </p>
             </div>
             <Button
-              onClick={() => sendWeeklyReportNow.mutate()}
+              onClick={() => sendWeeklyReportNow.mutate(undefined, {
+                onSuccess: () => toast.success("Weekly summary report sent!"),
+                onError: (e: any) => toast.error(e.message),
+              })}
               disabled={sendWeeklyReportNow.isPending}
               variant="outline"
               className="gap-2 sm:shrink-0"
@@ -673,7 +820,16 @@ export default function AdminPanel() {
                 size="sm"
                 className="gap-1.5 h-9 shrink-0"
                 disabled={!weeklyDirty || setWeeklySchedule.isPending}
-                onClick={() => setWeeklySchedule.mutate({ hour: weeklyHour, minute: weeklyMinute })}
+                onClick={() => setWeeklySchedule.mutate(
+                  { hour: weeklyHour, minute: weeklyMinute },
+                  {
+                    onSuccess: (res: any) => {
+                      toast.success(`Weekly report schedule updated to ${formatTime(res.hour, res.minute)} on Mondays.`);
+                      setWeeklyDirty(false);
+                    },
+                    onError: (e: any) => toast.error(e.message),
+                  }
+                )}
               >
                 {setWeeklySchedule.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -704,7 +860,13 @@ export default function AdminPanel() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
-                roleChange && updateRole.mutate({ id: roleChange.id, role: roleChange.newRole })
+                roleChange && updateRole.mutate(
+                  { id: roleChange.id, role: roleChange.newRole },
+                  {
+                    onSuccess: () => { toast.success("Role updated"); setRoleChange(null); },
+                    onError: (e: any) => toast.error(e.message),
+                  }
+                )
               }
               className={roleChange?.newRole === "admin" ? "" : "bg-destructive text-destructive-foreground hover:bg-destructive/90"}
             >
@@ -752,21 +914,21 @@ export default function AdminPanel() {
                 </p>
               </div>
 
-              {/* Grouped by Rock */}
+              {/* Grouped by Project */}
               <ScrollArea className="max-h-80">
                 <div className="space-y-3 pr-1">
-                  {previewData.rocks.map((rock) => (
-                    <div key={rock.rockName} className="rounded-lg border border-border overflow-hidden">
+                  {previewData.projects.map((project) => (
+                    <div key={project.projectName} className="rounded-lg border border-border overflow-hidden">
                       <div className="px-3 py-2 bg-muted/40 border-b border-border">
                         <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                          🪨 {rock.rockName}
+                          📁 {project.projectName}
                           <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 ml-auto">
-                            {rock.tasks.length}
+                            {project.tasks.length}
                           </Badge>
                         </p>
                       </div>
                       <div className="divide-y divide-border/50">
-                        {rock.tasks.map((t) => {
+                        {project.tasks.map((t) => {
                           const dueStr = t.dueDate
                             ? new Date(t.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
                             : null;
@@ -808,7 +970,16 @@ export default function AdminPanel() {
                   className="gap-1.5"
                   disabled={sendDigest.isPending}
                   onClick={() => {
-                    sendDigest.mutate();
+                    sendDigest.mutate(undefined, {
+                      onSuccess: (res: any) => {
+                        if (res.sent) {
+                          toast.success(`Daily digest sent — ${res.count} overdue task${res.count !== 1 ? "s" : ""} reported.`);
+                        } else {
+                          toast.info(res.reason ?? "Digest not sent.");
+                        }
+                      },
+                      onError: (e: any) => toast.error(e.message),
+                    });
                     setPreviewOpen(false);
                   }}
                 >

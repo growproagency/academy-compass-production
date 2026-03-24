@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import express from "express";
+import { orgMiddleware } from "./middleware/org";
 import { authMiddleware } from "./middleware/auth";
 
 import cors from "cors";
@@ -8,6 +9,8 @@ import authRouter from "./routes/auth";
 import usersRouter from "./routes/users";
 import projectsRouter from "./routes/projects";
 import tasksRouter from "./routes/tasks";
+import orgsRouter from "./routes/orgs";
+import invitesRouter from "./routes/invites";
 import {
   subtasksRouter,
   commentsRouter,
@@ -15,7 +18,7 @@ import {
   dashboardRouter,
   strategicOrganizerRouter,
   announcementsRouter,
-  rockCommentsRouter,
+  projectCommentsRouter,
   notificationsRouter,
 } from "./routes/misc";
 
@@ -29,8 +32,13 @@ app.use(cors({
   credentials: true,
 }));
 
-// ── Routes ────────────────────────────────────────────────────────────────────
+// Org middleware runs first — resolves req.org from subdomain / X-Org-Slug header
+app.use(orgMiddleware);
+// Auth middleware runs second — resolves req.user and assigns org on first login
 app.use(authMiddleware);
+
+// ── Routes ────────────────────────────────────────────────────────────────────
+app.use("/api/orgs", orgsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/projects", projectsRouter);
@@ -41,8 +49,9 @@ app.use("/api/milestones", milestonesRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/strategic-organizer", strategicOrganizerRouter);
 app.use("/api/announcements", announcementsRouter);
-app.use("/api/rock-comments", rockCommentsRouter);
+app.use("/api/project-comments", projectCommentsRouter);
 app.use("/api/notifications", notificationsRouter);
+app.use("/api/invites", invitesRouter);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => {

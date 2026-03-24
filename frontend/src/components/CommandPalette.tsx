@@ -12,7 +12,7 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { trpc } from "@/lib/trpc";
+import { useProjects } from "@/hooks/useApi";
 import {
   PRIORITY_BADGE_CLASS,
   PRIORITY_LABELS,
@@ -52,10 +52,10 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [, navigate] = useLocation();
-  const { data: projects } = trpc.projects.list.useQuery();
+  const { data: projects } = useProjects();
   const projectMap = useMemo(() => new Map((projects ?? []).map((p) => [p.id, p.name])), [projects]);
 
-  // Debounced search
+  // Debounced search (search not yet implemented — always returns empty)
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -64,10 +64,8 @@ export function CommandPalette() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
-  const { data: results, isLoading: searching } = trpc.tasks.search.useQuery(
-    { query: debouncedQuery },
-    { enabled: debouncedQuery.trim().length >= 2 }
-  );
+  const results: undefined = undefined;
+  const searching = false;
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {

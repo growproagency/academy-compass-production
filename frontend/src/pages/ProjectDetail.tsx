@@ -37,7 +37,25 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/lib/taskHelpers";
-import { trpc } from "@/lib/trpc";
+import {
+  useProject,
+  useTasksByProject,
+  useProjectMembers,
+  useUsers,
+  useMilestones,
+  useProjectComments,
+  useAddProjectMember,
+  useRemoveProjectMember,
+  useToggleMilestone,
+  useUpdateProject,
+  useDeleteMilestone,
+  useUpdateMilestone,
+  useCreateMilestone,
+  useCreateProjectComment,
+  useDeleteProjectComment,
+  QK,
+} from "@/hooks/useApi";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   CalendarDays,
@@ -79,35 +97,40 @@ function MilestoneDialog({
   const [dueDate, setDueDate] = useState(
     milestone?.dueDate ? new Date(milestone.dueDate).toISOString().split("T")[0] : ""
   );
-  const utils = trpc.useUtils();
+  const qc = useQueryClient();
 
-  const create = trpc.milestones.create.useMutation({
-    onSuccess: () => {
-      toast.success("Milestone created");
-      utils.milestones.list.invalidate({ projectId });
-      onSuccess();
-      onOpenChange(false);
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const update = trpc.milestones.update.useMutation({
-    onSuccess: () => {
-      toast.success("Milestone updated");
-      utils.milestones.list.invalidate({ projectId });
-      onSuccess();
-      onOpenChange(false);
-    },
-    onError: (e) => toast.error(e.message),
-  });
+  const create = useCreateMilestone();
+  const update = useUpdateMilestone();
 
   const handleSubmit = () => {
     if (!title.trim()) return;
     const dueDateMs = dueDate ? new Date(dueDate).getTime() : undefined;
     if (milestone) {
-      update.mutate({ id: milestone.id, title: title.trim(), description: description.trim() || undefined, dueDate: dueDateMs ?? null });
+      update.mutate(
+        { id: milestone.id, projectId, title: title.trim(), description: description.trim() || undefined, dueDate: dueDateMs ?? null },
+        {
+          onSuccess: () => {
+            toast.success("Milestone updated");
+            qc.invalidateQueries({ queryKey: QK.milestones(projectId) });
+            onSuccess();
+            onOpenChange(false);
+          },
+          onError: (e: any) => toast.error(e.message),
+        }
+      );
     } else {
-      create.mutate({ projectId, title: title.trim(), description: description.trim() || undefined, dueDate: dueDateMs });
+      create.mutate(
+        { projectId, title: title.trim(), description: description.trim() || undefined, dueDate: dueDateMs },
+        {
+          onSuccess: () => {
+            toast.success("Milestone created");
+            qc.invalidateQueries({ queryKey: QK.milestones(projectId) });
+            onSuccess();
+            onOpenChange(false);
+          },
+          onError: (e: any) => toast.error(e.message),
+        }
+      );
     }
   };
 
@@ -172,93 +195,29 @@ export default function ProjectDetail() {
     id: number; title: string; description: string | null; dueDate: number | null;
   } | undefined>(undefined);
   const [deleteMilestoneId, setDeleteMilestoneId] = useState<number | null>(null);
-  const utils = trpc.useUtils();
+  const qc = useQueryClient();
 
-  // Rock status config
-  const ROCK_STATUS_CONFIG = {
+  // Project status config
+  const PROJECT_STATUS_CONFIG = {
     on_track:  { label: "On Track",  color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/30" },
     off_track: { label: "Off Track", color: "text-destructive",  bg: "bg-destructive/10 border-destructive/30" },
     assist:    { label: "Assist",    color: "text-amber-500",   bg: "bg-amber-500/10 border-amber-500/30" },
     complete:  { label: "Complete",  color: "text-primary",     bg: "bg-primary/10 border-primary/30" },
   } as const;
-  type RockStatus = keyof typeof ROCK_STATUS_CONFIG;
+  type ProjectStatus = keyof typeof PROJECT_STATUS_CONFIG;
 
-  const { data: project, isLoading: projectLoading } = trpc.projects.getById.useQuery({ id: projectId });
-  const { data: tasks, isLoading: tasksLoading } = trpc.tasks.listByProject.useQuery({ projectId });
-  const { data: members } = trpc.projects.members.list.useQuery({ projectId });
-  const { data: allUsers } = trpc.users.list.useQuery();
-  const { data: milestones, isLoading: milestonesLoading } = trpc.milestones.list.useQuery({ projectId });
+  const { data: project, isLoading: projectLoading } = useProject(projectId);
+  const { data: tasks, isLoading: tasksLoading } = useTasksByProject(projectId);
+  const { data: members } = useProjectMembers(projectId);
+  const { data: allUsers } = useUsers();
+  const { data: milestones, isLoading: milestonesLoading } = useMilestones(projectId);
 
-  const addMember = trpc.projects.members.add.useMutation({
-    onSuccess: () => {
-      toast.success("Member added");
-      utils.projects.members.list.invalidate({ projectId });
-      setAddMemberOpen(false);
-      setSelectedUserId("");
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const removeMember = trpc.projects.members.remove.useMutation({
-    onSuccess: () => {
-      toast.success("Member removed");
-      utils.projects.members.list.invalidate({ projectId });
-      setRemoveMemberId(null);
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const toggleMilestone = trpc.milestones.toggle.useMutation({
-    onSuccess: (_, vars) => {
-      utils.milestones.list.invalidate({ projectId }).then(() => {
-        // Check if all milestones are now complete after this toggle
-        const updated = (milestones ?? []).map((m) =>
-          m.id === vars.id ? { ...m, completedAt: vars.completed ? new Date().toISOString() : null } : m
-        );
-        const allDone = updated.length > 0 && updated.every((m) => m.completedAt !== null);
-        if (allDone && vars.completed) {
-          fireConfetti();
-          setCelebrateOpen(true);
-        }
-      });
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const updateRockStatus = trpc.projects.update.useMutation({
-    onMutate: async ({ rockStatus }) => {
-      // Optimistic update
-      await utils.projects.getById.cancel({ id: projectId });
-      const prev = utils.projects.getById.getData({ id: projectId });
-      if (prev && rockStatus !== undefined) {
-        utils.projects.getById.setData({ id: projectId }, { ...prev, rockStatus: rockStatus ?? null });
-      }
-      return { prev };
-    },
-    onError: (_e, _v, ctx) => {
-      if (ctx?.prev) utils.projects.getById.setData({ id: projectId }, ctx.prev);
-      toast.error("Failed to update status");
-    },
-    onSuccess: () => {
-      utils.projects.getById.invalidate({ id: projectId });
-      utils.projects.listWithStats.invalidate();
-      toast.success("Rock status updated");
-    },
-  });
-
-  const deleteMilestone = trpc.milestones.delete.useMutation({
-    onSuccess: () => {
-      toast.success("Milestone deleted");
-      utils.milestones.list.invalidate({ projectId });
-      setDeleteMilestoneId(null);
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const updateMilestoneDueDate = trpc.milestones.update.useMutation({
-    onSuccess: () => utils.milestones.list.invalidate({ projectId }),
-    onError: (e) => toast.error(e.message),
-  });
+  const addMember = useAddProjectMember();
+  const removeMember = useRemoveProjectMember();
+  const toggleMilestone = useToggleMilestone();
+  const updateProjectStatus = useUpdateProject();
+  const deleteMilestone = useDeleteMilestone();
+  const updateMilestoneDueDate = useUpdateMilestone();
 
   // ── Milestone celebration ─────────────────────────────────────────────────
   const [celebrateOpen, setCelebrateOpen] = useState(false);
@@ -321,24 +280,20 @@ export default function ProjectDetail() {
       )
     );
   };
-  const { data: comments, isLoading: commentsLoading } = trpc.rockComments.list.useQuery({ projectId });
+  const { data: comments, isLoading: commentsLoading } = useProjectComments(projectId);
 
-  const addComment = trpc.rockComments.create.useMutation({
-    onSuccess: () => {
-      utils.rockComments.list.invalidate({ projectId });
-      setCommentText("");
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const deleteComment = trpc.rockComments.delete.useMutation({
-    onSuccess: () => utils.rockComments.list.invalidate({ projectId }),
-    onError: (e) => toast.error(e.message),
-  });
+  const addComment = useCreateProjectComment();
+  const deleteComment = useDeleteProjectComment();
 
   const handleAddComment = () => {
     if (!commentText.trim()) return;
-    addComment.mutate({ projectId, content: commentText.trim() });
+    addComment.mutate(
+      { projectId, content: commentText.trim() },
+      {
+        onSuccess: () => setCommentText(""),
+        onError: (e: any) => toast.error(e.message),
+      }
+    );
   };
 
   if (projectLoading) {
@@ -400,19 +355,25 @@ export default function ProjectDetail() {
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold truncate">{project.name}</h1>
-            <Badge variant="outline" className="text-xs border-primary/40 text-primary shrink-0">Rock</Badge>
+            <Badge variant="outline" className="text-xs border-primary/40 text-primary shrink-0">Project</Badge>
             {/* Status quick-update */}
             {isOwner ? (
               <Select
-                value={project.rockStatus ?? ""}
+                value={project.projectStatus ?? ""}
                 onValueChange={(val) =>
-                  updateRockStatus.mutate({ id: projectId, rockStatus: val as RockStatus })
+                  updateProjectStatus.mutate(
+                    { id: projectId, projectStatus: val as ProjectStatus },
+                    {
+                      onSuccess: () => toast.success("Project status updated"),
+                      onError: () => toast.error("Failed to update status"),
+                    }
+                  )
                 }
               >
                 <SelectTrigger
                   className={`h-6 text-xs px-2 py-0 border rounded-full w-auto gap-1 shrink-0 ${
-                    project.rockStatus
-                      ? ROCK_STATUS_CONFIG[project.rockStatus as RockStatus]?.bg ?? "border-border/60"
+                    project.projectStatus
+                      ? PROJECT_STATUS_CONFIG[project.projectStatus as ProjectStatus]?.bg ?? "border-border/60"
                       : "border-border/60 text-muted-foreground"
                   }`}
                 >
@@ -426,16 +387,16 @@ export default function ProjectDetail() {
                   <SelectItem value="complete">🏁 Complete</SelectItem>
                 </SelectContent>
               </Select>
-            ) : project.rockStatus ? (
+            ) : project.projectStatus ? (
               <Badge
                 variant="outline"
                 className={`text-xs shrink-0 ${
-                  ROCK_STATUS_CONFIG[project.rockStatus as RockStatus]?.bg ?? ""
+                  PROJECT_STATUS_CONFIG[project.projectStatus as ProjectStatus]?.bg ?? ""
                 } ${
-                  ROCK_STATUS_CONFIG[project.rockStatus as RockStatus]?.color ?? ""
+                  PROJECT_STATUS_CONFIG[project.projectStatus as ProjectStatus]?.color ?? ""
                 }`}
               >
-                {ROCK_STATUS_CONFIG[project.rockStatus as RockStatus]?.label}
+                {PROJECT_STATUS_CONFIG[project.projectStatus as ProjectStatus]?.label}
               </Badge>
             ) : null}
           </div>
@@ -524,7 +485,24 @@ export default function ProjectDetail() {
                       }`}
                     >
                       <button
-                        onClick={() => toggleMilestone.mutate({ id: m.id, completed: !isComplete, projectId })}
+                        onClick={() => toggleMilestone.mutate(
+                          { id: m.id, completed: !isComplete, projectId },
+                          {
+                            onSuccess: (_data: any, vars: any) => {
+                              qc.invalidateQueries({ queryKey: QK.milestones(projectId) }).then(() => {
+                                const updated = (milestones ?? []).map((ms: any) =>
+                                  ms.id === vars.id ? { ...ms, completedAt: vars.completed ? new Date().toISOString() : null } : ms
+                                );
+                                const allDone = updated.length > 0 && updated.every((ms: any) => ms.completedAt !== null);
+                                if (allDone && vars.completed) {
+                                  fireConfetti();
+                                  setCelebrateOpen(true);
+                                }
+                              });
+                            },
+                            onError: (e: any) => toast.error(e.message),
+                          }
+                        )}
                         className="mt-0.5 shrink-0 text-muted-foreground hover:text-primary transition-colors"
                       >
                         {isComplete ? (
@@ -550,7 +528,10 @@ export default function ProjectDetail() {
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   const ms = val ? new Date(val).getTime() : null;
-                                  updateMilestoneDueDate.mutate({ id: m.id, dueDate: ms, projectId });
+                                  updateMilestoneDueDate.mutate(
+                                    { id: m.id, dueDate: ms, projectId },
+                                    { onError: (e: any) => toast.error(e.message) }
+                                  );
                                 }}
                                 className="bg-transparent border-none outline-none text-xs cursor-pointer"
                               />
@@ -619,11 +600,11 @@ export default function ProjectDetail() {
                   <div className="flex items-center gap-2 min-w-0">
                     <Avatar className="h-7 w-7 border border-border shrink-0">
                       <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
-                        {getUserInitials(member.user?.name ?? "")}
+                        {getUserInitials(member.user?.name ?? member.user?.email ?? "")}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <p className="text-xs font-medium truncate">{member.user?.name ?? "Unknown"}</p>
+                      <p className="text-xs font-medium truncate">{member.user?.name ?? member.user?.email ?? "Unknown"}</p>
                       {project.ownerId === member.userId && (
                         <p className="text-[10px] text-primary">Owner</p>
                       )}
@@ -687,7 +668,10 @@ export default function ProjectDetail() {
                   </div>
                   {(c.authorId === user?.id || user?.role === "admin") && (
                     <button
-                      onClick={() => deleteComment.mutate({ id: c.id, projectId })}
+                      onClick={() => deleteComment.mutate(
+                        { id: c.id, projectId },
+                        { onError: (e: any) => toast.error(e.message) }
+                      )}
                       className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-destructive shrink-0"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -797,7 +781,13 @@ export default function ProjectDetail() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleteMilestoneId !== null && deleteMilestone.mutate({ id: deleteMilestoneId, projectId })}
+              onClick={() => deleteMilestoneId !== null && deleteMilestone.mutate(
+                { id: deleteMilestoneId, projectId },
+                {
+                  onSuccess: () => { setDeleteMilestoneId(null); toast.success("Milestone deleted."); },
+                  onError: (e: any) => toast.error(e.message),
+                }
+              )}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
@@ -831,7 +821,13 @@ export default function ProjectDetail() {
             <Button variant="outline" onClick={() => setAddMemberOpen(false)}>Cancel</Button>
             <Button
               disabled={!selectedUserId || selectedUserId === "none" || addMember.isPending}
-              onClick={() => selectedUserId && addMember.mutate({ projectId, userId: parseInt(selectedUserId) })}
+              onClick={() => selectedUserId && addMember.mutate(
+                { projectId, userId: parseInt(selectedUserId) },
+                {
+                  onSuccess: () => { setAddMemberOpen(false); setSelectedUserId(""); toast.success("Member added."); },
+                  onError: (e: any) => toast.error(e.message),
+                }
+              )}
             >
               {addMember.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Add Member
@@ -852,7 +848,7 @@ export default function ProjectDetail() {
             <DialogTitle className="text-xl">All Milestones Complete!</DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground">
               Every milestone for <strong>{project?.name}</strong> has been completed.
-              Would you like to mark this Rock as <strong>Complete</strong>?
+              Would you like to mark this Project as <strong>Complete</strong>?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col sm:flex-row gap-2 mt-2">
@@ -862,7 +858,7 @@ export default function ProjectDetail() {
             <Button
               className="flex-1"
               onClick={() => {
-                updateRockStatus.mutate({ id: projectId, rockStatus: "complete" });
+                updateProjectStatus.mutate({ id: projectId, projectStatus: "complete" });
                 setCelebrateOpen(false);
               }}
             >
@@ -878,13 +874,19 @@ export default function ProjectDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Member</AlertDialogTitle>
             <AlertDialogDescription>
-              Remove <strong>{userMap.get(removeMemberId ?? 0)}</strong> from this Rock?
+              Remove <strong>{userMap.get(removeMemberId ?? 0)}</strong> from this Project?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => removeMemberId !== null && removeMember.mutate({ projectId, userId: removeMemberId })}
+              onClick={() => removeMemberId !== null && removeMember.mutate(
+                { projectId, userId: removeMemberId },
+                {
+                  onSuccess: () => { setRemoveMemberId(null); toast.success("Member removed."); },
+                  onError: (e: any) => toast.error(e.message),
+                }
+              )}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Remove

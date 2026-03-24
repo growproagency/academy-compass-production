@@ -1,4 +1,4 @@
-import { trpc } from "@/lib/trpc";
+import { useStrategicOrganizer } from "@/hooks/useApi";
 import { Loader2, Printer, X } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -129,7 +129,8 @@ function GoalCardBlock({ label, card }: { label: string; card: GoalCard }) {
 
 export default function StrategicOrganizerPreview() {
   const [, setLocation] = useLocation();
-  const { data, isLoading } = trpc.strategicOrganizer.get.useQuery();
+  const { data: _data, isLoading } = useStrategicOrganizer();
+  const data = _data as any;
 
   if (isLoading) {
     return (

@@ -1,5 +1,6 @@
 import { useAuth } from "@/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
+import { useComments, useCreateComment, useDeleteComment, QK } from "@/hooks/useApi";
+import { useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -79,58 +80,18 @@ export function TaskCommentThread({ taskId, taskTitle, open, onOpenChange }: Tas
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const utils = trpc.useUtils();
+  const qc = useQueryClient();
 
-  const { data: rawComments = [], isLoading, error } = trpc.comments.list.useQuery(
-    { taskId },
-    { enabled: open && taskId > 0 }
-  );
+  const { data: rawComments = [], isLoading, error } = useComments(taskId);
 
   // Cast to our extended Comment type that includes isActivity
-  const comments = rawComments as Comment[];
+  const comments = rawComments as unknown as Comment[];
 
   // Count only real user comments for the badge
-  const userCommentCount = comments.filter((c) => !c.isActivity).length;
+  const userCommentCount = (comments as Comment[]).filter((c) => !c.isActivity).length;
 
-  const createMutation = trpc.comments.create.useMutation({
-    onSuccess: (newComment) => {
-      utils.comments.list.setData({ taskId }, (old) => {
-        const c = newComment as unknown as Comment;
-        const updated = old ? [...old, c] : [c];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return updated as any;
-      });
-      setContent("");
-      setSubmitting(false);
-      setTimeout(() => {
-        if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-      }, 50);
-    },
-    onError: (err) => {
-      toast.error(err.message || "Failed to post comment");
-      setSubmitting(false);
-    },
-  });
-
-  const deleteMutation = trpc.comments.delete.useMutation({
-    onMutate: async ({ id }) => {
-      await utils.comments.list.cancel({ taskId });
-      const prev = utils.comments.list.getData({ taskId });
-      utils.comments.list.setData({ taskId }, (old) =>
-        old ? old.filter((c) => c.id !== id) : []
-      );
-      return { prev };
-    },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) utils.comments.list.setData({ taskId }, ctx.prev);
-      toast.error("Failed to delete comment");
-    },
-    onSettled: () => {
-      utils.comments.list.invalidate({ taskId });
-    },
-  });
+  const createMutation = useCreateComment();
+  const deleteMutation = useDeleteComment();
 
   // Auto-scroll to bottom when comments load
   useEffect(() => {
@@ -144,7 +105,29 @@ export function TaskCommentThread({ taskId, taskTitle, open, onOpenChange }: Tas
     const trimmed = content.trim();
     if (!trimmed || submitting) return;
     setSubmitting(true);
-    createMutation.mutate({ taskId, content: trimmed });
+    createMutation.mutate(
+      { taskId, content: trimmed },
+      {
+        onSuccess: (newComment) => {
+          qc.setQueryData(QK.comments(taskId), (old: any) => {
+            const c = newComment as unknown as Comment;
+            const updated = old ? [...old, c] : [c];
+            return updated;
+          });
+          setContent("");
+          setSubmitting(false);
+          setTimeout(() => {
+            if (scrollRef.current) {
+              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }
+          }, 50);
+        },
+        onError: (err: any) => {
+          toast.error(err.message || "Failed to post comment");
+          setSubmitting(false);
+        },
+      }
+    );
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -290,7 +273,23 @@ export function TaskCommentThread({ taskId, taskTitle, open, onOpenChange }: Tas
                           {/* Delete button */}
                           {canDelete(comment) && (
                             <button
-                              onClick={() => deleteMutation.mutate({ id: comment.id, taskId })}
+                              onClick={async () => {
+                                await qc.cancelQueries({ queryKey: QK.comments(taskId) });
+                                const prev = qc.getQueryData(QK.comments(taskId));
+                                qc.setQueryData(QK.comments(taskId), (old: any) =>
+                                  old ? old.filter((c: any) => c.id !== comment.id) : []
+                                );
+                                deleteMutation.mutate(
+                                  { id: comment.id, taskId },
+                                  {
+                                    onError: () => {
+                                      if (prev) qc.setQueryData(QK.comments(taskId), prev);
+                                      toast.error("Failed to delete comment");
+                                    },
+                                    onSettled: () => qc.invalidateQueries({ queryKey: QK.comments(taskId) }),
+                                  }
+                                );
+                              }}
                               disabled={deleteMutation.isPending}
                               className={`absolute -top-2 ${
                                 isOwn ? "-left-2" : "-right-2"

@@ -32,7 +32,16 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/lib/taskHelpers";
-import { trpc } from "@/lib/trpc";
+import {
+  useTasks,
+  useProjectsWithStats,
+  useHealthTrend,
+  useUsers,
+  useUpdateTask,
+  useReorderTask,
+  useBulkDeleteTasks,
+  useAnnouncements,
+} from "@/hooks/useApi";
 import {
   AlertCircle,
   Calendar,
@@ -77,11 +86,11 @@ const COLUMNS: { status: TaskStatus; label: string; icon: React.ReactNode; color
   { status: "done", label: "Done", icon: <CheckCircle2 className="h-4 w-4" />, color: "text-green-400" },
 ];
 
-type DashboardView = "todos" | "rocks";
-type RockStatus = "on_track" | "off_track" | "assist" | "complete";
+type DashboardView = "todos" | "projects";
+type ProjectStatus = "on_track" | "off_track" | "assist" | "complete";
 
-const ROCK_STATUS_CONFIG: Record<
-  RockStatus,
+const PROJECT_STATUS_CONFIG: Record<
+  ProjectStatus,
   { label: string; color: string; bg: string; border: string; icon: React.ReactNode }
 > = {
   on_track: {
@@ -119,8 +128,8 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [view, setView] = useState<DashboardView>("todos");
 
-  // ── Rocks view state ───────────────────────────────────────────────────────
-  const [rockStatusFilter, setRockStatusFilter] = useState<RockStatus | "all">("all");
+  // ── Projects view state ────────────────────────────────────────────────────
+  const [projectStatusFilter, setProjectStatusFilter] = useState<ProjectStatus | "all">("all");
 
   // ── To-Do date range filter ────────────────────────────────────────────────
   type DateRange = "all" | "this_quarter" | "last_quarter";
@@ -142,44 +151,23 @@ export default function Dashboard() {
   const [bulkPending, setBulkPending] = useState(false);
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
 
-  const utils = trpc.useUtils();
-  const { data: _allTasks, isLoading: tasksLoading } = trpc.tasks.listAll.useQuery();
-  const { data: _rocksWithStats, isLoading: rocksLoading } = trpc.projects.listWithStats.useQuery();
-  const { data: _healthTrend } = trpc.projects.healthTrend.useQuery();
-  const { data: _users } = trpc.users.list.useQuery();
+  const { data: _allTasks, isLoading: tasksLoading } = useTasks();
+  const { data: _projectsWithStats, isLoading: projectsLoading } = useProjectsWithStats();
+  const { data: _healthTrend } = useHealthTrend();
+  const { data: _users } = useUsers();
 
-  // Cast from unknown (trpc shim types) to typed arrays
+  // Cast from unknown to typed arrays
   const allTasks = _allTasks as any[] | undefined;
-  const rocksWithStats = _rocksWithStats as any[] | undefined;
+  const projectsWithStats = _projectsWithStats as any[] | undefined;
   const healthTrend = _healthTrend as any[] | undefined;
   const users = _users as any[] | undefined;
 
-  const updateTask = trpc.tasks.update.useMutation({
-    onSuccess: () => {
-      utils.tasks.listAll.invalidate();
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
+  const updateTask = useUpdateTask();
+  const reorderTask = useReorderTask();
+  const bulkDeleteMutation = useBulkDeleteTasks();
 
-  const reorderTask = trpc.tasks.reorder.useMutation({
-    onSuccess: () => utils.tasks.listAll.invalidate(),
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const bulkDeleteMutation = trpc.tasks.bulkDelete.useMutation({
-    onSuccess: (res: any) => {
-      utils.tasks.listAll.invalidate();
-      const msg = res.forbidden > 0
-        ? `Archived ${res.deleted} To-Do${res.deleted !== 1 ? "s" : ""} (${res.forbidden} skipped — no permission).`
-        : `Archived ${res.deleted} To-Do${res.deleted !== 1 ? "s" : ""}.`;
-      toast.success(msg);
-      clearSelection();
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  // Build lookup maps — reuse rocksWithStats (already prefetched) instead of a separate projects.list fetch
-  const projectMap = new Map((rocksWithStats ?? []).map((p: any) => [p.id, p.name]));
+  // Build lookup maps — reuse projectsWithStats (already prefetched) instead of a separate projects.list fetch
+  const projectMap = new Map((projectsWithStats ?? []).map((p: any) => [p.id, p.name]));
   const userMap = new Map((users ?? []).map((u: any) => [u.id, u.name]));
 
   // Derive stats locally from allTasks — no extra round-trip needed
@@ -189,7 +177,7 @@ export default function Dashboard() {
     doneTasks: allTasks.filter((t: any) => t.status === "done").length,
     inProgressTasks: allTasks.filter((t: any) => t.status === "in_progress").length,
     overdueTasks: allTasks.filter((t: any) => t.status !== "done" && t.dueDate && t.dueDate < now).length,
-    totalProjects: rocksWithStats?.length ?? 0,
+    totalProjects: projectsWithStats?.length ?? 0,
   } : null;
 
   // Filter & sort tasks
@@ -230,7 +218,7 @@ export default function Dashboard() {
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     if (task.status !== status) {
-      updateTask.mutate({ id: dragTaskId, status });
+      updateTask.mutate({ id: dragTaskId, status }, { onError: (err: any) => toast.error(err.message) });
     }
 
     if (insertBeforeTaskId !== undefined) {
@@ -242,7 +230,7 @@ export default function Dashboard() {
         newOrder.splice(insertIdx, 0, { id: dragTaskId, sortOrder: -1 });
         newOrder.forEach((item, i) => { item.sortOrder = i * 10; });
         for (const item of newOrder) {
-          reorderTask.mutate({ id: item.id, sortOrder: item.sortOrder });
+          reorderTask.mutate({ id: item.id, sortOrder: item.sortOrder }, { onError: (err: any) => toast.error(err.message) });
         }
       }
     }
@@ -389,12 +377,12 @@ export default function Dashboard() {
       {/* ── Pinned announcement banner ─────────────────────────────────────── */}
       <AnnouncementBanner />
 
-      {/* ── View toggle: Rocks | To-Dos ─────────────────────────────────────── */}
+      {/* ── View toggle: Projects | To-Dos ──────────────────────────────────── */}
       <div className="flex items-center gap-1 p-1 bg-secondary/60 rounded-xl w-fit">
         <button
-          onClick={() => setView("rocks")}
+          onClick={() => setView("projects")}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
-            view === "rocks"
+            view === "projects"
               ? "bg-background shadow-sm text-foreground"
               : "text-muted-foreground hover:text-foreground"
           }`}
@@ -416,14 +404,14 @@ export default function Dashboard() {
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
-          ROCKS VIEW
+          PROJECTS VIEW
       ══════════════════════════════════════════════════════════════════════ */}
-      {view === "rocks" && (
+      {view === "projects" && (
         <div className="space-y-4">
-          {/* Rocks summary stats */}
+          {/* Projects summary stats */}
           {(() => {
-            const totalOverdueMilestones = rocksWithStats?.reduce((sum, r) => sum + ((r as any).milestoneOverdue ?? 0), 0) ?? 0;
-            const rocksWithOverdueMilestones = rocksWithStats?.filter((r) => ((r as any).milestoneOverdue ?? 0) > 0).length ?? 0;
+            const totalOverdueMilestones = projectsWithStats?.reduce((sum, r) => sum + ((r as any).milestoneOverdue ?? 0), 0) ?? 0;
+            const projectsWithOverdueMilestones = projectsWithStats?.filter((r) => ((r as any).milestoneOverdue ?? 0) > 0).length ?? 0;
             return (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <Card className="bg-card border-border/60">
@@ -432,7 +420,7 @@ export default function Dashboard() {
                       <Mountain className="h-5 w-5" />
                       <span className="text-xs font-medium text-muted-foreground">Total Projects</span>
                     </div>
-                    <p className="text-2xl font-bold">{rocksWithStats?.length ?? 0}</p>
+                    <p className="text-2xl font-bold">{projectsWithStats?.length ?? 0}</p>
                   </CardContent>
                 </Card>
                 <Card className="bg-card border-border/60">
@@ -442,9 +430,9 @@ export default function Dashboard() {
                       <span className="text-xs font-medium text-muted-foreground">Milestones</span>
                     </div>
                     <p className="text-2xl font-bold">
-                      {rocksWithStats?.reduce((sum, r) => sum + (r.milestoneDone ?? 0), 0) ?? 0}
+                      {projectsWithStats?.reduce((sum, r) => sum + (r.milestoneDone ?? 0), 0) ?? 0}
                       <span className="text-sm font-normal text-muted-foreground ml-1">
-                        / {rocksWithStats?.reduce((sum, r) => sum + (r.milestoneTotal ?? 0), 0) ?? 0} done
+                        / {projectsWithStats?.reduce((sum, r) => sum + (r.milestoneTotal ?? 0), 0) ?? 0} done
                       </span>
                     </p>
                   </CardContent>
@@ -456,9 +444,9 @@ export default function Dashboard() {
                       <span className="text-xs font-medium text-muted-foreground">On Track</span>
                     </div>
                     <p className="text-2xl font-bold">
-                      {rocksWithStats?.filter((r) => (r as any).rockStatus === "on_track").length ?? 0}
+                      {projectsWithStats?.filter((r) => (r as any).projectStatus === "on_track").length ?? 0}
                       <span className="text-sm font-normal text-muted-foreground ml-1">
-                        / {rocksWithStats?.length ?? 0} Projects
+                        / {projectsWithStats?.length ?? 0} Projects
                       </span>
                     </p>
                   </CardContent>
@@ -468,8 +456,8 @@ export default function Dashboard() {
                   className="text-left"
                   onClick={() => {
                     if (totalOverdueMilestones > 0) {
-                      // Filter to only show rocks with overdue milestones
-                      setRockStatusFilter("all");
+                      // Filter to only show projects with overdue milestones
+                      setProjectStatusFilter("all");
                     }
                   }}
                 >
@@ -492,7 +480,7 @@ export default function Dashboard() {
                       </p>
                       {totalOverdueMilestones > 0 && (
                         <p className="text-xs text-destructive/70 mt-0.5">
-                          across {rocksWithOverdueMilestones} Project{rocksWithOverdueMilestones !== 1 ? "s" : ""}
+                          across {projectsWithOverdueMilestones} Project{projectsWithOverdueMilestones !== 1 ? "s" : ""}
                         </p>
                       )}
                       {totalOverdueMilestones === 0 && (
@@ -506,24 +494,24 @@ export default function Dashboard() {
           })()}
 
 
-          {/* ── Rock Health Summary removed per user request ── */}
-          {(false as boolean) && rocksWithStats && rocksWithStats.length > 0 && (() => {
-            const total = rocksWithStats.length;
-            const counts: Record<RockStatus, number> = { on_track: 0, off_track: 0, assist: 0, complete: 0 };
-            for (const r of rocksWithStats) {
-              const s = ((r as any).rockStatus as RockStatus) ?? "on_track";
+          {/* ── Project Health Summary removed per user request ── */}
+          {(false as boolean) && projectsWithStats && projectsWithStats.length > 0 && (() => {
+            const total = projectsWithStats.length;
+            const counts: Record<ProjectStatus, number> = { on_track: 0, off_track: 0, assist: 0, complete: 0 };
+            for (const r of projectsWithStats) {
+              const s = ((r as any).projectStatus as ProjectStatus) ?? "on_track";
               counts[s] = (counts[s] ?? 0) + 1;
             }
-            const totalMilestoneDone = rocksWithStats.reduce((sum, r) => sum + (r.milestoneDone ?? 0), 0);
-            const totalMilestoneTotal = rocksWithStats.reduce((sum, r) => sum + (r.milestoneTotal ?? 0), 0);
+            const totalMilestoneDone = projectsWithStats.reduce((sum, r) => sum + (r.milestoneDone ?? 0), 0);
+            const totalMilestoneTotal = projectsWithStats.reduce((sum, r) => sum + (r.milestoneTotal ?? 0), 0);
             const milestonePct = totalMilestoneTotal > 0 ? Math.round((totalMilestoneDone / totalMilestoneTotal) * 100) : 0;
 
             // Segment widths as percentages
-            const segments: { key: RockStatus; pct: number }[] = (
-              ["complete", "on_track", "assist", "off_track"] as RockStatus[]
+            const segments: { key: ProjectStatus; pct: number }[] = (
+              ["complete", "on_track", "assist", "off_track"] as ProjectStatus[]
             ).map((k) => ({ key: k, pct: total > 0 ? Math.round((counts[k] / total) * 100) : 0 }));
 
-            const segmentColors: Record<RockStatus, string> = {
+            const segmentColors: Record<ProjectStatus, string> = {
               complete: "bg-primary",
               on_track: "bg-emerald-500",
               assist: "bg-amber-400",
@@ -534,8 +522,8 @@ export default function Dashboard() {
               <Card className="border-border/60 shadow-sm">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">School-Wide Rock Health</p>
-                    <span className="text-xs text-muted-foreground">{total} Rock{total !== 1 ? "s" : ""}</span>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">School-Wide Project Health</p>
+                    <span className="text-xs text-muted-foreground">{total} Project{total !== 1 ? "s" : ""}</span>
                   </div>
 
                   {/* Segmented health bar */}
@@ -546,7 +534,7 @@ export default function Dashboard() {
                           key={key}
                           className={`${segmentColors[key]} transition-all`}
                           style={{ width: `${pct}%` }}
-                          title={`${ROCK_STATUS_CONFIG[key].label}: ${counts[key]}`}
+                          title={`${PROJECT_STATUS_CONFIG[key].label}: ${counts[key]}`}
                         />
                       ) : null
                     )}
@@ -555,16 +543,16 @@ export default function Dashboard() {
 
                   {/* Legend */}
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
-                    {(["complete", "on_track", "assist", "off_track"] as RockStatus[]).map((k) => (
+                    {(["complete", "on_track", "assist", "off_track"] as ProjectStatus[]).map((k) => (
                       counts[k] > 0 ? (
                         <button
                           key={k}
-                          onClick={() => setRockStatusFilter(k)}
+                          onClick={() => setProjectStatusFilter(k)}
                           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                         >
                           <span className={`inline-block h-2 w-2 rounded-full ${segmentColors[k]}`} />
                           <span className="font-medium">{counts[k]}</span>
-                          <span>{ROCK_STATUS_CONFIG[k].label}</span>
+                          <span>{PROJECT_STATUS_CONFIG[k].label}</span>
                         </button>
                       ) : null
                     ))}
@@ -631,16 +619,16 @@ export default function Dashboard() {
             );
           })()}
 
-          {/* Status filter for Rocks */}
+          {/* Status filter for Projects */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-muted-foreground flex items-center gap-1"><Filter className="h-3 w-3" /> Status:</span>
             {(["all", "on_track", "off_track", "assist", "complete"] as const).map((s) => {
-              const cfg = s !== "all" ? ROCK_STATUS_CONFIG[s] : null;
-              const active = rockStatusFilter === s;
+              const cfg = s !== "all" ? PROJECT_STATUS_CONFIG[s] : null;
+              const active = projectStatusFilter === s;
               return (
                 <button
                   key={s}
-                  onClick={() => setRockStatusFilter(s)}
+                  onClick={() => setProjectStatusFilter(s)}
                   className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border transition-all ${
                     active
                       ? cfg
@@ -656,14 +644,14 @@ export default function Dashboard() {
             })}
           </div>
 
-          {/* Rocks list */}
-          {rocksLoading ? (
+          {/* Projects list */}
+          {projectsLoading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-28 rounded-xl bg-muted animate-pulse" />
               ))}
             </div>
-          ) : !rocksWithStats || rocksWithStats.length === 0 ? (
+          ) : !projectsWithStats || projectsWithStats.length === 0 ? (
             <Card className="p-12 text-center">
               <Mountain className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
               <p className="font-semibold text-muted-foreground">No Projects yet</p>
@@ -677,40 +665,40 @@ export default function Dashboard() {
             </Card>
           ) : (
             <div className="space-y-3">
-              {rocksWithStats
-                .filter((rock) => {
-                  if (rockStatusFilter === "all") return true;
-                  return (rock as any).rockStatus === rockStatusFilter;
+              {projectsWithStats
+                .filter((project) => {
+                  if (projectStatusFilter === "all") return true;
+                  return (project as any).projectStatus === projectStatusFilter;
                 })
-                .map((rock) => {
-                const milestonePct = (rock.milestoneTotal ?? 0) > 0
-                  ? Math.round(((rock.milestoneDone ?? 0) / (rock.milestoneTotal ?? 1)) * 100)
+                .map((project) => {
+                const milestonePct = (project.milestoneTotal ?? 0) > 0
+                  ? Math.round(((project.milestoneDone ?? 0) / (project.milestoneTotal ?? 1)) * 100)
                   : 0;
-                const rockDueDate = (rock as any).dueDate as number | null | undefined;
-                const rockOverdue = rockDueDate ? rockDueDate < Date.now() : false;
-                const rockDueDateLabel = rockDueDate
-                  ? new Date(rockDueDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+                const projectDueDate = (project as any).dueDate as number | null | undefined;
+                const projectOverdue = projectDueDate ? projectDueDate < Date.now() : false;
+                const projectDueDateLabel = projectDueDate
+                  ? new Date(projectDueDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
                   : null;
-                const rockStatus = (rock as any).rockStatus as RockStatus | null | undefined;
-                const statusCfg = rockStatus ? ROCK_STATUS_CONFIG[rockStatus] : null;
+                const projectStatus = (project as any).projectStatus as ProjectStatus | null | undefined;
+                const statusCfg = projectStatus ? PROJECT_STATUS_CONFIG[projectStatus] : null;
                 return (
                   <Card
-                    key={rock.id}
+                    key={project.id}
                     className={`p-4 hover:shadow-md transition-shadow cursor-pointer ${
-                      rockOverdue
+                      projectOverdue
                         ? "border-l-[3px] border-l-destructive bg-destructive/[0.02]"
                         : ""
                     }`}
-                    onClick={() => setLocation(`/projects/${rock.id}`)}
+                    onClick={() => setLocation(`/projects/${project.id}`)}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <Mountain className={`h-4 w-4 shrink-0 ${rockOverdue ? "text-destructive" : "text-primary"}`} />
-                          <h3 className={`font-semibold text-sm truncate ${rockOverdue ? "text-destructive" : ""}`}>
-                            {rock.name}
+                          <Mountain className={`h-4 w-4 shrink-0 ${projectOverdue ? "text-destructive" : "text-primary"}`} />
+                          <h3 className={`font-semibold text-sm truncate ${projectOverdue ? "text-destructive" : ""}`}>
+                            {project.name}
                           </h3>
-                          {rockOverdue && (
+                          {projectOverdue && (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-destructive bg-destructive/10 border border-destructive/20 px-2 py-0.5 rounded-full shrink-0">
                               <AlertCircle className="h-2.5 w-2.5" />
                               Overdue
@@ -723,19 +711,19 @@ export default function Dashboard() {
                             </span>
                           )}
                         </div>
-                        {rock.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-1 mb-2">{rock.description}</p>
+                        {project.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-1 mb-2">{project.description}</p>
                         )}
 
                         {/* Due date row */}
-                        {rockDueDateLabel && (
+                        {projectDueDateLabel && (
                           <div className={`inline-flex items-center gap-1 text-[10px] font-medium mb-3 ${
-                            rockOverdue ? "text-destructive" : "text-muted-foreground"
+                            projectOverdue ? "text-destructive" : "text-muted-foreground"
                           }`}>
-                            {rockOverdue
+                            {projectOverdue
                               ? <AlertCircle className="h-3 w-3" />
                               : <Calendar className="h-3 w-3" />}
-                            Due {rockDueDateLabel}
+                            Due {projectDueDateLabel}
                           </div>
                         )}
 
@@ -748,7 +736,7 @@ export default function Dashboard() {
                                 Milestones
                               </span>
                               <span className="text-[10px] text-muted-foreground">
-                                {rock.milestoneDone ?? 0}/{rock.milestoneTotal ?? 0}
+                                {project.milestoneDone ?? 0}/{project.milestoneTotal ?? 0}
                               </span>
                             </div>
                             <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
@@ -767,8 +755,8 @@ export default function Dashboard() {
                           <div className="text-xl font-bold text-primary">{milestonePct}%</div>
                           <div className="text-[10px] text-muted-foreground">milestones</div>
                         </div>
-                        {(rock as any).ownerName && (() => {
-                          const ownerName = (rock as any).ownerName as string;
+                        {(project as any).ownerName && (() => {
+                          const ownerName = (project as any).ownerName as string;
                           const initials = ownerName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
                           return (
                             <div
@@ -787,8 +775,8 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* CTA to manage Rocks */}
-          {rocksWithStats && rocksWithStats.length > 0 && (
+          {/* CTA to manage Projects */}
+          {projectsWithStats && projectsWithStats.length > 0 && (
             <Button variant="outline" size="sm" className="gap-2" onClick={() => setLocation("/projects")}>
               <FolderKanban className="h-4 w-4" />
               Manage all Projects
@@ -851,7 +839,7 @@ export default function Dashboard() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Projects</SelectItem>
-                {(rocksWithStats ?? []).map((p: any) => (
+                {(projectsWithStats ?? []).map((p: any) => (
                   <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -1091,7 +1079,16 @@ export default function Dashboard() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
                 setBulkDeleteConfirmOpen(false);
-                bulkDeleteMutation.mutate(Array.from(selectedIds));
+                bulkDeleteMutation.mutate(Array.from(selectedIds), {
+                  onSuccess: (res: any) => {
+                    const msg = res.forbidden > 0
+                      ? `Archived ${res.deleted} To-Do${res.deleted !== 1 ? "s" : ""} (${res.forbidden} skipped — no permission).`
+                      : `Archived ${res.deleted} To-Do${res.deleted !== 1 ? "s" : ""}.`;
+                    toast.success(msg);
+                    clearSelection();
+                  },
+                  onError: (err: any) => toast.error(err.message),
+                });
               }}
             >
               <Trash2 className="h-4 w-4 mr-1.5" />
@@ -1101,7 +1098,7 @@ export default function Dashboard() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Create To-Do dialog — projectId is optional; standalone To-Dos have no Rock */}
+      {/* Create To-Do dialog — projectId is optional; standalone To-Dos have no Project */}
       <TaskDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
@@ -1116,7 +1113,7 @@ export default function Dashboard() {
 // ─── Announcement Banner ──────────────────────────────────────────────────────
 function AnnouncementBanner() {
   const [, setLocation] = useLocation();
-  const { data: announcements } = trpc.announcements.list.useQuery();
+  const { data: announcements } = useAnnouncements();
   const [dismissed, setDismissed] = useState<Set<number>>(() => {
     try {
       const saved = sessionStorage.getItem("dismissed-announcements");

@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +8,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -18,10 +16,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { trpc } from "@/lib/trpc";
+import {
+  useProjects,
+  useProjectMembers,
+  useUsers,
+  useSubtasks,
+  useCreateSubtask,
+  useToggleSubtask,
+  useDeleteSubtask,
+  useCreateTask,
+  useUpdateTask,
+  QK,
+} from "@/hooks/useApi";
+import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
-  CalendarIcon,
   Loader2,
   Plus,
   RefreshCw,
@@ -73,7 +82,7 @@ export default function TaskDialog({
   onSuccess,
 }: Props) {
   const isEdit = !!task;
-  const utils = trpc.useUtils();
+  const qc = useQueryClient();
 
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -82,43 +91,33 @@ export default function TaskDialog({
   const [status, setStatus] = useState<"todo" | "in_progress" | "done">(defaultStatus);
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
-  const [calOpen, setCalOpen] = useState(false);
 
   // Recurrence
   const [recurrenceType, setRecurrenceType] = useState<"none" | "daily" | "biweekly" | "weekly" | "monthly">("none");
   const [recurrenceInterval, setRecurrenceInterval] = useState(1);
   const [recurrenceEndsAt, setRecurrenceEndsAt] = useState<Date | undefined>(undefined);
-  const [recCalOpen, setRecCalOpen] = useState(false);
 
   // Subtasks
   const [subtaskDrafts, setSubtaskDrafts] = useState<SubtaskDraft[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const subtaskInputRef = useRef<HTMLInputElement>(null);
 
-  // For standalone creation (no projectId passed), allow user to optionally link a Rock
-  const { data: allProjects } = trpc.projects.list.useQuery(undefined, { enabled: !projectId });
+  // For standalone creation (no projectId passed), allow user to optionally link a Project
+  const { data: allProjects } = useProjects();
   const effectiveProjectId = projectId ?? (selectedProjectId ? parseInt(selectedProjectId) : null);
-  const { data: members } = trpc.projects.members.list.useQuery(
-    { projectId: effectiveProjectId! },
-    { enabled: !!effectiveProjectId }
-  );
+  const { data: members } = useProjectMembers(effectiveProjectId ?? 0);
+  // When no project is linked, fall back to all org users so any user can be assigned
+  const { data: allUsers } = useUsers();
+  const assignableUsers = effectiveProjectId
+    ? (members ?? []).map((m: any) => ({ id: m.userId, name: m.user?.name, email: m.user?.email }))
+    : (allUsers ?? []).map((u: any) => ({ id: u.id, name: u.name, email: u.email }));
 
   // Existing subtasks (edit mode)
-  const { data: existingSubtasks, refetch: refetchSubtasks } = trpc.subtasks.listByTask.useQuery(
-    { taskId: task?.id ?? 0 },
-    { enabled: isEdit && open && !!task?.id }
-  );
+  const { data: existingSubtasks } = useSubtasks(task?.id ?? 0);
 
-  const createSubtaskMutation = trpc.subtasks.create.useMutation({
-    onSuccess: () => refetchSubtasks(),
-    onError: (err) => toast.error(err.message),
-  });
-  const toggleSubtaskMutation = trpc.subtasks.toggle.useMutation({
-    onSuccess: () => refetchSubtasks(),
-  });
-  const deleteSubtaskMutation = trpc.subtasks.delete.useMutation({
-    onSuccess: () => refetchSubtasks(),
-  });
+  const createSubtaskMutation = useCreateSubtask();
+  const toggleSubtaskMutation = useToggleSubtask();
+  const deleteSubtaskMutation = useDeleteSubtask();
 
   useEffect(() => {
     if (open) {
@@ -141,30 +140,13 @@ export default function TaskDialog({
   }, [open, task, defaultStatus]);
 
   const invalidate = () => {
-    utils.tasks.listAll.invalidate();
-    if (effectiveProjectId) utils.tasks.listByProject.invalidate({ projectId: effectiveProjectId });
-    utils.dashboard.stats.invalidate();
+    qc.invalidateQueries({ queryKey: QK.tasks });
+    if (effectiveProjectId) qc.invalidateQueries({ queryKey: QK.tasksByProject(effectiveProjectId) });
+    qc.invalidateQueries({ queryKey: QK.dashboardStats });
   };
 
-  const createTask = trpc.tasks.create.useMutation({
-    onSuccess: () => {
-      toast.success("To-Do created");
-      invalidate();
-      onOpenChange(false);
-      onSuccess?.();
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const updateTask = trpc.tasks.update.useMutation({
-    onSuccess: () => {
-      toast.success("To-Do updated");
-      invalidate();
-      onOpenChange(false);
-      onSuccess?.();
-    },
-    onError: (err) => toast.error(err.message),
-  });
+  const createTask = useCreateTask();
+  const updateTask = useUpdateTask();
 
   const isPending = createTask.isPending || updateTask.isPending;
 
@@ -205,20 +187,42 @@ export default function TaskDialog({
     };
 
     if (isEdit && task) {
-      updateTask.mutate({
-        id: task.id,
-        ...payload,
-        assigneeId: assigneeId ? parseInt(assigneeId) : null,
-        dueDate: dueDate ? dueDate.getTime() : null,
-        recurrenceEndsAt: recurrenceEndsAt ? recurrenceEndsAt.getTime() : null,
-        notes: notes.trim() || null,
-        description: null,
-      });
+      updateTask.mutate(
+        {
+          id: task.id,
+          ...payload,
+          assigneeId: assigneeId ? parseInt(assigneeId) : null,
+          dueDate: dueDate ? dueDate.getTime() : null,
+          recurrenceEndsAt: recurrenceEndsAt ? recurrenceEndsAt.getTime() : null,
+          notes: notes.trim() || null,
+          description: null,
+        },
+        {
+          onSuccess: () => {
+            toast.success("To-Do updated");
+            invalidate();
+            onOpenChange(false);
+            onSuccess?.();
+          },
+          onError: (err: any) => toast.error(err.message),
+        }
+      );
     } else {
-      createTask.mutate({
-        ...payload,
-        subtasks: subtaskDrafts.map((s) => s.title),
-      });
+      createTask.mutate(
+        {
+          ...payload,
+          subtasks: subtaskDrafts.map((s) => s.title),
+        },
+        {
+          onSuccess: () => {
+            toast.success("To-Do created");
+            invalidate();
+            onOpenChange(false);
+            onSuccess?.();
+          },
+          onError: (err: any) => toast.error(err.message),
+        }
+      );
     }
   };
 
@@ -293,11 +297,11 @@ export default function TaskDialog({
             </div>
           </div>
 
-          {/* Rock (optional link) — only shown when creating standalone To-Dos */}
+          {/* Project (optional link) — only shown when creating standalone To-Dos */}
           {!projectId && !isEdit && allProjects && allProjects.length > 0 && (
             <div className="space-y-1.5">
               <Label>
-                Link to Rock
+                Link to Project
                 <span className="ml-1.5 text-xs font-normal text-muted-foreground">optional</span>
               </Label>
               <Select
@@ -305,10 +309,10 @@ export default function TaskDialog({
                 onValueChange={(v) => setSelectedProjectId(v === "none" ? "" : v)}
               >
                 <SelectTrigger className="bg-input">
-                  <SelectValue placeholder="No Rock (standalone)" />
+                  <SelectValue placeholder="No Project (standalone)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No Rock (standalone)</SelectItem>
+                  <SelectItem value="none">No Project (standalone)</SelectItem>
                   {allProjects.map((p) => (
                     <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
                   ))}
@@ -330,9 +334,9 @@ export default function TaskDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {members?.map((m) => (
-                    <SelectItem key={m.userId} value={m.userId.toString()}>
-                      {m.user?.name || m.user?.email || `User #${m.userId}`}
+                  {assignableUsers.map((u) => (
+                    <SelectItem key={u.id} value={u.id.toString()}>
+                      {u.name || u.email || `User #${u.id}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -340,39 +344,21 @@ export default function TaskDialog({
             </div>
             <div className="space-y-1.5">
               <Label>Due Date</Label>
-              <Popover open={calOpen} onOpenChange={setCalOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal bg-input border-border"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                    {dueDate ? format(dueDate, "MMM d, yyyy") : <span className="text-muted-foreground">Pick date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={dueDate}
-                    onSelect={(d) => { setDueDate(d); setCalOpen(false); }}
-                    initialFocus
-                  />
-                  {dueDate && (
-                    <div className="p-2 border-t border-border">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="w-full text-muted-foreground"
-                        onClick={() => { setDueDate(undefined); setCalOpen(false); }}
-                      >
-                        Clear date
-                      </Button>
-                    </div>
-                  )}
-                </PopoverContent>
-              </Popover>
+              <input
+                type="date"
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-input border-border"
+                value={dueDate ? format(dueDate, "yyyy-MM-dd") : ""}
+                onChange={e => setDueDate(e.target.value ? new Date(e.target.value + "T00:00:00") : undefined)}
+              />
+              {dueDate && (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setDueDate(undefined)}
+                >
+                  Clear due date
+                </button>
+              )}
             </div>
           </div>
 
@@ -509,40 +495,21 @@ export default function TaskDialog({
                 <span className="text-muted-foreground text-sm mx-1">·</span>
 
                 <span className="text-sm text-muted-foreground">Ends</span>
-                <Popover open={recCalOpen} onOpenChange={setRecCalOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="bg-input border-border font-normal text-sm"
-                    >
-                      <CalendarIcon className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
-                      {recurrenceEndsAt ? format(recurrenceEndsAt, "MMM d, yyyy") : "Never"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={recurrenceEndsAt}
-                      onSelect={(d) => { setRecurrenceEndsAt(d); setRecCalOpen(false); }}
-                      initialFocus
-                    />
-                    {recurrenceEndsAt && (
-                      <div className="p-2 border-t border-border">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="w-full text-muted-foreground"
-                          onClick={() => { setRecurrenceEndsAt(undefined); setRecCalOpen(false); }}
-                        >
-                          Clear end date
-                        </Button>
-                      </div>
-                    )}
-                  </PopoverContent>
-                </Popover>
+                <input
+                  type="date"
+                  className="border rounded-lg px-2 py-1 text-sm bg-input border-border"
+                  value={recurrenceEndsAt ? format(recurrenceEndsAt, "yyyy-MM-dd") : ""}
+                  onChange={e => setRecurrenceEndsAt(e.target.value ? new Date(e.target.value + "T00:00:00") : undefined)}
+                />
+                {recurrenceEndsAt && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setRecurrenceEndsAt(undefined)}
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
             )}
           </div>

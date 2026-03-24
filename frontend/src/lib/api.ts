@@ -3,6 +3,20 @@ import { supabase } from "./supabaseClient";
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
+/**
+ * Detect the org slug from the current URL.
+ * - Production: extract subdomain from hostname (e.g. "school" from "school.app.com")
+ * - Local dev: fall back to VITE_ORG_SLUG env var
+ */
+function getOrgSlug(): string {
+  const hostname = window.location.hostname;
+  if (hostname !== "localhost" && hostname !== "127.0.0.1") {
+    const parts = hostname.split(".");
+    if (parts.length >= 3) return parts[0];
+  }
+  return import.meta.env.VITE_ORG_SLUG || "";
+}
+
 class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -16,24 +30,24 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-
-  // const url = `${API_BASE}/api${path}`; for testing
-  const url = `${API_BASE}${path}`; // production
+  const url = `${API_BASE}${path}`;
 
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
+  const orgSlug = getOrgSlug();
+
   const res = await fetch(url, {
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+      ...(orgSlug ? { "X-Org-Slug": orgSlug } : {}),
       ...options.headers,
     },
     ...options,
   });
 
   if (res.status === 401) {
-    // Let the auth state listener in useAuth handle the redirect
     throw new ApiError("Unauthorized", 401);
   }
 
@@ -71,6 +85,17 @@ function del<T>(path: string, body?: unknown) {
 }
 
 export const api = {
+  // ── Orgs ──────────────────────────────────────────────────────────────────
+  orgs: {
+    current: () => get("/orgs/current"),
+    list: () => get("/orgs"),
+    create: (data: { name: string; slug: string; brandPrimaryColor?: string; brandAccentColor?: string; logoUrl?: string }) =>
+      post("/orgs", data),
+    update: (id: number, data: { name?: string; slug?: string; brandPrimaryColor?: string; brandAccentColor?: string; logoUrl?: string }) =>
+      patch(`/orgs/${id}`, data),
+    delete: (id: number) => del(`/orgs/${id}`),
+  },
+
   // ── Auth ──────────────────────────────────────────────────────────────────
   auth: {
     me: () => get("/auth/me"),
@@ -187,12 +212,12 @@ export const api = {
       patch(`/announcements/${id}/pin`, { isPinned }),
   },
 
-  // ── Rock Comments ─────────────────────────────────────────────────────────
-  rockComments: {
-    list: (projectId: number) => get(`/projects/${projectId}/rock-comments`),
+  // ── Project Comments ──────────────────────────────────────────────────────
+  projectComments: {
+    list: (projectId: number) => get(`/projects/${projectId}/project-comments`),
     create: (projectId: number, content: string) =>
-      post(`/projects/${projectId}/rock-comments`, { content }),
-    delete: (id: number) => del(`/rock-comments/${id}`),
+      post(`/projects/${projectId}/project-comments`, { content }),
+    delete: (id: number) => del(`/project-comments/${id}`),
   },
 
   // ── Notifications ─────────────────────────────────────────────────────────
@@ -212,6 +237,24 @@ export const api = {
     setWeeklyReportSchedule: (hour: number, minute: number) =>
       post("/notifications/weekly-report-schedule", { hour, minute }),
     sendWeeklyReportNow: () => post("/notifications/send-weekly-report"),
+  },
+
+  // ── Invites ───────────────────────────────────────────────────────────────
+  invites: {
+    list: () => get("/invites"),
+    create: (email: string, role: "user" | "admin") => post("/invites", { email, role }),
+    delete: (id: number) => del(`/invites/${id}`),
+    // Invite links (no email required)
+    links: {
+      list: () => get("/invites/links"),
+      create: (role: "user" | "admin", expiresInDays?: number) =>
+        post("/invites/links", { role, expiresInDays }),
+      delete: (id: number) => del(`/invites/links/${id}`),
+    },
+    // Public — no auth header needed
+    validateToken: (token: string) => get(`/invites/join/${token}`),
+    signup: (token: string, data: { name: string; email: string; password: string }) =>
+      post(`/invites/join/${token}`, data),
   },
 };
 

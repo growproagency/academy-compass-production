@@ -26,7 +26,8 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/lib/taskHelpers";
-import { trpc } from "@/lib/trpc";
+import { useDeleteTask, useArchiveTask, useUpdateTask, useSubtasks, useToggleSubtask, useComments, QK } from "@/hooks/useApi";
+import { useQueryClient } from "@tanstack/react-query";
 import { useIsMobile } from "@/hooks/useMobile";
 import { useSwipeGesture } from "@/hooks/useSwipeGesture";
 import {
@@ -107,54 +108,26 @@ export default function TaskCard({
   const [optimisticStatus, setOptimisticStatus] = useState<TaskStatus | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const isMobile = useIsMobile();
-  const utils = trpc.useUtils();
+  const qc = useQueryClient();
 
   const currentStatus = optimisticStatus ?? task.status;
   const isDone = currentStatus === "done";
 
-  const deleteTask = trpc.tasks.delete.useMutation({
-    onSuccess: () => {
-      toast.success("To-Do deleted");
-      utils.tasks.listAll.invalidate();
-      if (task.projectId) utils.tasks.listByProject.invalidate({ projectId: task.projectId });
-      utils.dashboard.stats.invalidate();
-      onUpdated?.();
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const archiveTask = trpc.tasks.archive.useMutation({
-    onSuccess: () => {
-      toast.success("To-Do archived");
-      utils.tasks.listAll.invalidate();
-      if (task.projectId) utils.tasks.listByProject.invalidate({ projectId: task.projectId });
-      utils.dashboard.stats.invalidate();
-      onUpdated?.();
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const updateStatus = trpc.tasks.update.useMutation({
-    onMutate: ({ status }) => {
-      if (status) setOptimisticStatus(status);
-    },
-    onSuccess: () => {
-      setOptimisticStatus(null);
-      utils.tasks.listAll.invalidate();
-      if (task.projectId) utils.tasks.listByProject.invalidate({ projectId: task.projectId });
-      utils.dashboard.stats.invalidate();
-      onUpdated?.();
-    },
-    onError: (err) => {
-      setOptimisticStatus(null);
-      toast.error(err.message);
-    },
-  });
+  const deleteTask = useDeleteTask();
+  const archiveTask = useArchiveTask();
+  const updateStatus = useUpdateTask();
 
   function handleMarkDone(e: React.MouseEvent) {
     e.stopPropagation();
     const newStatus: TaskStatus = isDone ? "todo" : "done";
-    updateStatus.mutate({ id: task.id, status: newStatus });
+    setOptimisticStatus(newStatus);
+    updateStatus.mutate(
+      { id: task.id, status: newStatus },
+      {
+        onSuccess: () => { setOptimisticStatus(null); onUpdated?.(); },
+        onError: (err: any) => { setOptimisticStatus(null); toast.error(err.message); },
+      }
+    );
     toast.success(isDone ? "To-Do reopened" : "To-Do marked as done! 🎉");
   }
 
@@ -163,7 +136,14 @@ export default function TaskCard({
     const idx = STATUS_CYCLE.indexOf(currentStatus);
     const next = STATUS_CYCLE[Math.min(idx + 1, STATUS_CYCLE.length - 1)];
     if (next === currentStatus) return;
-    updateStatus.mutate({ id: task.id, status: next });
+    setOptimisticStatus(next);
+    updateStatus.mutate(
+      { id: task.id, status: next },
+      {
+        onSuccess: () => { setOptimisticStatus(null); onUpdated?.(); },
+        onError: (err: any) => { setOptimisticStatus(null); toast.error(err.message); },
+      }
+    );
     const labels: Record<TaskStatus, string> = { todo: "To Do", in_progress: "In Progress", done: "Done" };
     toast.success(`Moved to ${labels[next]}`);
   }
@@ -172,7 +152,14 @@ export default function TaskCard({
     const idx = STATUS_CYCLE.indexOf(currentStatus);
     const prev = STATUS_CYCLE[Math.max(idx - 1, 0)];
     if (prev === currentStatus) return;
-    updateStatus.mutate({ id: task.id, status: prev });
+    setOptimisticStatus(prev);
+    updateStatus.mutate(
+      { id: task.id, status: prev },
+      {
+        onSuccess: () => { setOptimisticStatus(null); onUpdated?.(); },
+        onError: (err: any) => { setOptimisticStatus(null); toast.error(err.message); },
+      }
+    );
     const labels: Record<TaskStatus, string> = { todo: "To Do", in_progress: "In Progress", done: "Done" };
     toast.success(`Moved back to ${labels[prev]}`);
   }
@@ -183,22 +170,14 @@ export default function TaskCard({
     threshold: 60,
   });
 
-  // Subtasks (fetched lazily from cache)
-  const { data: subtasks } = trpc.subtasks.listByTask.useQuery(
-    { taskId: task.id },
-    { enabled: false }
-  );
-  const toggleSubtask = trpc.subtasks.toggle.useMutation({
-    onSuccess: () => utils.subtasks.listByTask.invalidate({ taskId: task.id }),
-  });
+  // Subtasks (read from cache only — fetched by TaskCommentThread when opened)
+  const subtasks = qc.getQueryData<any[]>(QK.subtasks(task.id));
+  const toggleSubtask = useToggleSubtask();
 
   // Live comment count from cache (exclude activity entries)
-  const cachedComments = trpc.comments.list.useQuery(
-    { taskId: task.id },
-    { enabled: false }
-  );
-  const commentCount = cachedComments.data
-    ? cachedComments.data.filter((c) => !(c as any).isActivity).length
+  const cachedComments = qc.getQueryData<any[]>(QK.comments(task.id));
+  const commentCount = cachedComments
+    ? cachedComments.filter((c) => !(c as any).isActivity).length
     : (task.commentCount ?? 0);
 
   const overdue = isOverdue(task.dueDate) && !isDone;
@@ -311,7 +290,10 @@ export default function TaskCard({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => archiveTask.mutate(task.id)}
+                onClick={() => archiveTask.mutate(task.id, {
+                  onSuccess: () => { toast.success("To-Do archived"); onUpdated?.(); },
+                  onError: (err: any) => toast.error(err.message),
+                })}
                 className="cursor-pointer text-muted-foreground focus:text-foreground"
               >
                 <Trash2 className="mr-2 h-3.5 w-3.5" />
@@ -500,7 +482,10 @@ export default function TaskCard({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteTask.mutate(task.id)}
+              onClick={() => deleteTask.mutate(task.id, {
+                onSuccess: () => { toast.success("To-Do deleted"); onUpdated?.(); },
+                onError: (err: any) => toast.error(err.message),
+              })}
             >
               Delete Permanently
             </AlertDialogAction>

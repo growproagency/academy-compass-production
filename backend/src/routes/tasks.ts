@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
+import { requireOrg } from "../middleware/org";
 import {
   getTaskById, getTasksByProject, listAllTasks, getTasksForCalendar, listArchivedTasks,
   createTask, updateTask, deleteTask, archiveTask, restoreTask, reorderTask, searchTasks,
@@ -22,14 +23,15 @@ async function canAccessTask(task: any, userId: number, role: string) {
 }
 
 // GET /api/tasks
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, requireOrg, async (req, res) => {
   const user = (req as any).user;
+  const org = (req as any).org;
   try {
     if (req.query.archived === "true") {
-      return res.json(await listArchivedTasks(user.id, user.role === "admin"));
+      return res.json(await listArchivedTasks(user.id, user.role === "admin", org.id));
     }
     if (req.query.calendar === "true") {
-      return res.json(await getTasksForCalendar(user.id, user.role === "admin"));
+      return res.json(await getTasksForCalendar(user.id, user.role === "admin", org.id));
     }
     if (req.query.projectId) {
       const projectId = Number(req.query.projectId);
@@ -37,7 +39,7 @@ router.get("/", requireAuth, async (req, res) => {
       if (!isMember && user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
       return res.json(await getTasksByProject(projectId));
     }
-    const taskList = await listAllTasks(user.id, user.role === "admin");
+    const taskList = await listAllTasks(user.id, user.role === "admin", org.id);
     if (taskList.length === 0) return res.json([]);
     const taskIds = taskList.map((t: any) => t.id);
     const subtaskCounts = await getSubtaskCountsByTasks(taskIds);
@@ -52,12 +54,13 @@ router.get("/", requireAuth, async (req, res) => {
 });
 
 // GET /api/tasks/search
-router.get("/search", requireAuth, async (req, res) => {
+router.get("/search", requireAuth, requireOrg, async (req, res) => {
   const user = (req as any).user;
+  const org = (req as any).org;
   const query = String(req.query.q || "").trim();
   if (query.length < 2) return res.json([]);
   try {
-    res.json(await searchTasks(query, user.id, user.role === "admin"));
+    res.json(await searchTasks(query, user.id, user.role === "admin", org.id));
   } catch (e: any) {
     res.status(500).json({ message: e.message });
   }
@@ -78,8 +81,9 @@ router.get("/:id", requireAuth, async (req, res) => {
 });
 
 // POST /api/tasks
-router.post("/", requireAuth, async (req, res) => {
+router.post("/", requireAuth, requireOrg, async (req, res) => {
   const user = (req as any).user;
+  const org = (req as any).org;
   const { title, description, notes, projectId, assigneeId, status, priority, dueDate,
     recurrenceType, recurrenceInterval, recurrenceEndsAt, subtasks } = req.body;
   if (!title) return res.status(400).json({ message: "Title required" });
@@ -87,6 +91,7 @@ router.post("/", requireAuth, async (req, res) => {
     const task = await createTask({
       title, description: description ?? null, notes: notes ?? null,
       projectId: projectId ?? null, assigneeId: assigneeId ?? null, creatorId: user.id,
+      organizationId: org.id,
       status: status ?? "todo", priority: priority ?? "medium", dueDate: dueDate ?? null,
       recurrenceType: recurrenceType ?? "none", recurrenceInterval: recurrenceInterval ?? 1,
       recurrenceEndsAt: recurrenceEndsAt ?? null,

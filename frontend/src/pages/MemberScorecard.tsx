@@ -1,5 +1,5 @@
 import { useAuth } from "@/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
+import { useUserScorecard } from "@/hooks/useApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,14 +16,14 @@ import {
 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 
-const ROCK_STATUS_COLORS: Record<string, string> = {
+const PROJECT_STATUS_COLORS: Record<string, string> = {
   on_track: "bg-emerald-100 text-emerald-700",
   off_track: "bg-red-100 text-red-700",
   assist: "bg-amber-100 text-amber-700",
   complete: "bg-indigo-100 text-indigo-700",
 };
 
-const ROCK_STATUS_LABELS: Record<string, string> = {
+const PROJECT_STATUS_LABELS: Record<string, string> = {
   on_track: "On Track",
   off_track: "Off Track",
   assist: "Needs Assist",
@@ -79,10 +79,7 @@ export default function MemberScorecard() {
   const [, navigate] = useLocation();
   const { user: currentUser } = useAuth();
 
-  const { data, isLoading, error } = trpc.users.scorecard.useQuery(
-    { userId },
-    { enabled: !!userId && !isNaN(userId) }
-  );
+  const { data, isLoading, error } = useUserScorecard(userId);
 
   if (isLoading) {
     return (
@@ -107,7 +104,7 @@ export default function MemberScorecard() {
     );
   }
 
-  const { user, rocks, stats, recentActivity } = data;
+  const { user, projects, stats, recentActivity } = data;
   const isOwnScorecard = currentUser?.id === userId;
 
   return (
@@ -149,8 +146,8 @@ export default function MemberScorecard() {
         <StatCard
           icon={Target}
           label="Projects"
-          value={stats.totalRocks}
-          sub={`${stats.ownedRocks} owned`}
+          value={stats.totalProjects}
+          sub={`${stats.ownedProjects} owned`}
           color="bg-indigo-100"
         />
         <StatCard
@@ -197,26 +194,26 @@ export default function MemberScorecard() {
         </Card>
       )}
 
-      {/* Rocks */}
-      {rocks.length > 0 && (
+      {/* Projects */}
+      {projects.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-            <Target className="h-4 w-4" /> Projects ({rocks.length})
+            <Target className="h-4 w-4" /> Projects ({projects.length})
           </h2>
           <div className="space-y-2">
-            {rocks.map((rock) => (
-              <Card key={rock.id} className="border-border/60">
+            {projects.map((project) => (
+              <Card key={project.id} className="border-border/60">
                 <CardContent className="p-3 flex items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{rock.name}</p>
-                    {rock.dueDate && (
+                    <p className="font-medium text-sm truncate">{project.name}</p>
+                    {project.dueDate && (
                       <p className="text-xs text-muted-foreground">
-                        Due {new Date(rock.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                        Due {new Date(project.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
                       </p>
                     )}
                   </div>
-                  <Badge className={`text-xs shrink-0 ${ROCK_STATUS_COLORS[rock.rockStatus]}`} variant="outline">
-                    {ROCK_STATUS_LABELS[rock.rockStatus]}
+                  <Badge className={`text-xs shrink-0 ${PROJECT_STATUS_COLORS[project.projectStatus]}`} variant="outline">
+                    {PROJECT_STATUS_LABELS[project.projectStatus]}
                   </Badge>
                 </CardContent>
               </Card>
@@ -251,7 +248,7 @@ export default function MemberScorecard() {
       )}
 
       {/* Empty state */}
-      {rocks.length === 0 && recentActivity.length === 0 && (
+      {projects.length === 0 && recentActivity.length === 0 && (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
             <User className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />

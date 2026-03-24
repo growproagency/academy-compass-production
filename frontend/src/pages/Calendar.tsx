@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { trpc } from "@/lib/trpc";
+import { useCalendarTasks, useCalendarMilestones, useProjectsWithStats } from "@/hooks/useApi";
 import {
   addDays,
   addMonths,
@@ -201,7 +201,7 @@ function EventDetailSheet({
                 </div>
               )}
               <div className="pt-3 border-t border-border">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Rock</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Project</p>
                 <p className="font-medium text-foreground">{event.projectName}</p>
               </div>
             </div>
@@ -248,7 +248,7 @@ function EventDetailSheet({
                 </div>
               )}
               <div className="pt-3 border-t border-border">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Rock</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Project</p>
                 <p className="font-medium text-foreground">{event.projectName}</p>
               </div>
             </div>
@@ -821,11 +821,10 @@ export default function Calendar() {
   const [filterProject, setFilterProject] = useState<string>("all");
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
 
-  const { data: rawTasks = [], isLoading: tasksLoading } = trpc.tasks.listForCalendar.useQuery();
-  const { data: rawMilestones = [], isLoading: milestonesLoading } =
-    trpc.milestones.listForCalendar.useQuery();
-  // Use the already-prefetched listWithStats data for the Rock filter dropdown
-  const { data: projects = [] } = trpc.projects.listWithStats.useQuery();
+  const { data: rawTasks = [], isLoading: tasksLoading } = useCalendarTasks();
+  const { data: rawMilestones = [], isLoading: milestonesLoading } = useCalendarMilestones();
+  // Use the already-prefetched listWithStats data for the Project filter dropdown
+  const { data: projects = [] } = useProjectsWithStats();
 
   const isLoading = tasksLoading || milestonesLoading;
 
@@ -873,7 +872,7 @@ export default function Calendar() {
               </span>
             </div>
 
-            {/* Rock filter */}
+            {/* Project filter */}
             <Select value={filterProject} onValueChange={setFilterProject}>
               <SelectTrigger className="h-8 text-xs w-36 bg-background">
                 <SelectValue placeholder="All Projects" />

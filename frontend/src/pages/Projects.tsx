@@ -21,8 +21,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-// TaskDialog removed — milestone quick-add is now inline on the Rock card
-import { trpc } from "@/lib/trpc";
+// TaskDialog removed — milestone quick-add is now inline on the Project card
+import {
+  useProjectsWithStats,
+  useUsers,
+  useCreateProject,
+  useUpdateProject,
+  useDeleteProject,
+  useCreateMilestone,
+  useUpdateMilestone,
+  useToggleMilestone,
+  QK,
+} from "@/hooks/useApi";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Calendar,
@@ -59,20 +70,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type RockStatus = "on_track" | "off_track" | "assist" | "complete";
+type ProjectStatus = "on_track" | "off_track" | "assist" | "complete";
 
 type Project = {
   id: number;
   name: string;
   description: string | null;
   dueDate?: number | null;
-  rockStatus?: RockStatus | null;
+  projectStatus?: ProjectStatus | null;
   ownerId: number;
   createdAt: Date;
 };
 
-const ROCK_STATUS_CONFIG: Record<
-  RockStatus,
+const PROJECT_STATUS_CONFIG: Record<
+  ProjectStatus,
   { label: string; color: string; bg: string; border: string; icon: React.ReactNode }
 > = {
   on_track: {
@@ -106,7 +117,7 @@ const ROCK_STATUS_CONFIG: Record<
 };
 
 /** Format a UTC ms timestamp as a human-readable date string */
-function formatRockDueDate(ts: number | null | undefined): string | null {
+function formatProjectDueDate(ts: number | null | undefined): string | null {
   if (!ts) return null;
   return new Date(ts).toLocaleDateString(undefined, {
     month: "short",
@@ -115,7 +126,7 @@ function formatRockDueDate(ts: number | null | undefined): string | null {
   });
 }
 
-function isRockOverdue(ts: number | null | undefined): boolean {
+function isProjectOverdue(ts: number | null | undefined): boolean {
   if (!ts) return false;
   return ts < Date.now();
 }
@@ -134,14 +145,14 @@ function ProjectFormDialog({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [dueDateStr, setDueDateStr] = useState(""); // "YYYY-MM-DD" from <input type="date">
-  const [rockStatus, setRockStatus] = useState<RockStatus | "">("on_track");
-  const utils = trpc.useUtils();
+  const [projectStatus, setProjectStatus] = useState<ProjectStatus | "">("on_track");
+  const qc = useQueryClient();
 
   useEffect(() => {
     if (open) {
       setName(project?.name ?? "");
       setDescription(project?.description ?? "");
-      setRockStatus((project?.rockStatus as RockStatus) ?? "on_track");
+      setProjectStatus((project?.projectStatus as ProjectStatus) ?? "on_track");
       // Convert stored ms timestamp → "YYYY-MM-DD" for the date input
       if (project?.dueDate) {
         const d = new Date(project.dueDate);
@@ -155,25 +166,8 @@ function ProjectFormDialog({
     }
   }, [open, project]);
 
-  const create = trpc.projects.create.useMutation({
-    onSuccess: () => {
-      toast.success("Rock created");
-      utils.projects.list.invalidate();
-      utils.projects.listWithStats.invalidate();
-      onSuccess?.();
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const update = trpc.projects.update.useMutation({
-    onSuccess: () => {
-      toast.success("Rock updated");
-      utils.projects.list.invalidate();
-      utils.projects.listWithStats.invalidate();
-      onSuccess?.();
-    },
-    onError: (e) => toast.error(e.message),
-  });
+  const create = useCreateProject();
+  const update = useUpdateProject();
 
   const isPending = create.isPending || update.isPending;
 
@@ -186,20 +180,42 @@ function ProjectFormDialog({
       : null;
 
     if (project) {
-      update.mutate({
-        id: project.id,
-        name: name.trim(),
-        description: description.trim() || undefined,
-        dueDate,
-        rockStatus: rockStatus || undefined,
-      });
+      update.mutate(
+        {
+          id: project.id,
+          name: name.trim(),
+          description: description.trim() || undefined,
+          dueDate,
+          projectStatus: projectStatus || undefined,
+        },
+        {
+          onSuccess: () => {
+            toast.success("Project updated");
+            qc.invalidateQueries({ queryKey: QK.projects });
+            qc.invalidateQueries({ queryKey: QK.projectsWithStats });
+            onSuccess?.();
+          },
+          onError: (e: any) => toast.error(e.message),
+        }
+      );
     } else {
-      create.mutate({
-        name: name.trim(),
-        description: description.trim() || undefined,
-        dueDate,
-        rockStatus: rockStatus || undefined,
-      });
+      create.mutate(
+        {
+          name: name.trim(),
+          description: description.trim() || undefined,
+          dueDate,
+          projectStatus: projectStatus || undefined,
+        },
+        {
+          onSuccess: () => {
+            toast.success("Project created");
+            qc.invalidateQueries({ queryKey: QK.projects });
+            qc.invalidateQueries({ queryKey: QK.projectsWithStats });
+            onSuccess?.();
+          },
+          onError: (e: any) => toast.error(e.message),
+        }
+      );
     }
   };
 
@@ -225,7 +241,7 @@ function ProjectFormDialog({
             <Label htmlFor="proj-desc">Description</Label>
             <Textarea
               id="proj-desc"
-              placeholder="What is this rock about?"
+              placeholder="What is this project about?"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
@@ -235,8 +251,8 @@ function ProjectFormDialog({
           <div className="space-y-1.5">
             <Label htmlFor="proj-status">Status</Label>
             <Select
-              value={rockStatus || "on_track"}
-              onValueChange={(v) => setRockStatus(v as RockStatus)}
+              value={projectStatus || "on_track"}
+              onValueChange={(v) => setProjectStatus(v as ProjectStatus)}
             >
               <SelectTrigger id="proj-status" className="bg-input">
                 <SelectValue placeholder="Select status" />
@@ -274,7 +290,7 @@ function ProjectFormDialog({
             </Button>
             <Button type="submit" disabled={isPending || !name.trim()}>
               {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {project ? "Save Changes" : "Create Rock"}
+              {project ? "Save Changes" : "Create Project"}
             </Button>
           </DialogFooter>
         </form>
@@ -298,35 +314,11 @@ export default function Projects() {
   const [editingMilestoneId, setEditingMilestoneId] = useState<number | null>(null);
   const [editingMilestoneTitle, setEditingMilestoneTitle] = useState("");
   const [editingMilestoneDueDate, setEditingMilestoneDueDate] = useState("");
-  const utils = trpc.useUtils();
+  const qc = useQueryClient();
 
-  const createMilestoneMutation = trpc.milestones.create.useMutation({
-    onSuccess: () => {
-      utils.projects.listWithStats.invalidate();
-      setQuickMilestoneProjectId(null);
-      setQuickMilestoneTitle("");
-      setQuickMilestoneDueDate("");
-      setQuickMilestonePending(false);
-      toast.success("Milestone added");
-    },
-    onError: (err) => {
-      toast.error(err.message);
-      setQuickMilestonePending(false);
-    },
-  });
-
-  const toggleMilestoneMutation = trpc.milestones.toggle.useMutation({
-    onError: (err) => toast.error(err.message),
-  });
-
-  const updateMilestoneMutation = trpc.milestones.update.useMutation({
-    onSuccess: () => {
-      utils.projects.listWithStats.invalidate();
-      setEditingMilestoneId(null);
-      toast.success("Milestone updated");
-    },
-    onError: (err) => toast.error(err.message),
-  });
+  const createMilestoneMutation = useCreateMilestone();
+  const toggleMilestoneMutation = useToggleMilestone();
+  const updateMilestoneMutation = useUpdateMilestone();
 
   const handleMilestoneEditSave = (id: number) => {
     const title = editingMilestoneTitle.trim();
@@ -334,29 +326,46 @@ export default function Projects() {
     const dueDate = editingMilestoneDueDate
       ? new Date(editingMilestoneDueDate + "T00:00:00").getTime()
       : null;
-    updateMilestoneMutation.mutate({ id, title, dueDate });
+    updateMilestoneMutation.mutate(
+      { id, title, dueDate },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: QK.projectsWithStats });
+          setEditingMilestoneId(null);
+          toast.success("Milestone updated");
+        },
+        onError: (err: any) => toast.error(err.message),
+      }
+    );
   };
 
   const handleQuickMilestoneSubmit = (projectId: number) => {
     const title = quickMilestoneTitle.trim();
     if (!title) return;
     setQuickMilestonePending(true);
-    const dueDateTs = quickMilestoneDueDate ? new Date(quickMilestoneDueDate + "T00:00:00").getTime() : undefined;
-    createMilestoneMutation.mutate({ projectId, title, dueDate: dueDateTs });
+    const dueDateTs = quickMilestoneDueDate ? new Date(quickMilestoneDueDate).getTime() : undefined;
+    createMilestoneMutation.mutate(
+      { projectId, title, dueDate: dueDateTs },
+      {
+        onSuccess: () => {
+          setQuickMilestoneProjectId(null);
+          setQuickMilestoneTitle("");
+          setQuickMilestoneDueDate("");
+          setQuickMilestonePending(false);
+          toast.success("Milestone added");
+        },
+        onError: (err: any) => {
+          toast.error(err.message);
+          setQuickMilestonePending(false);
+        },
+      }
+    );
   };
 
-  const { data: projects, isLoading } = trpc.projects.listWithStats.useQuery();
-  const { data: users } = trpc.users.list.useQuery();
+  const { data: projects, isLoading } = useProjectsWithStats();
+  const { data: users } = useUsers();
 
-  const deleteMutation = trpc.projects.delete.useMutation({
-    onSuccess: () => {
-      toast.success("Rock deleted");
-      utils.projects.listWithStats.invalidate();
-      utils.projects.list.invalidate();
-      setDeleteProject(null);
-    },
-    onError: (e) => toast.error(e.message),
-  });
+  const deleteMutation = useDeleteProject();
 
   const getOwnerName = (ownerId: number) =>
     users?.find((u) => u.id === ownerId)?.name ?? "Unknown";
@@ -395,7 +404,7 @@ export default function Projects() {
           </div>
           <Button onClick={() => setCreateOpen(true)} className="gap-2">
             <Plus className="h-4 w-4" />
-            Create Rock
+            Create Project
           </Button>
         </div>
       ) : (
@@ -410,10 +419,10 @@ export default function Projects() {
             const milestoneProgress =
               milestoneTotal > 0 ? Math.round((milestoneDone / milestoneTotal) * 100) : 0;
             const dueDate = (project as any).dueDate as number | null | undefined;
-            const overdue = isRockOverdue(dueDate);
-            const dueDateLabel = formatRockDueDate(dueDate);
-            const rockStatus = (project as any).rockStatus as RockStatus | null | undefined;
-            const statusCfg = rockStatus ? ROCK_STATUS_CONFIG[rockStatus] : null;
+            const overdue = isProjectOverdue(dueDate);
+            const dueDateLabel = formatProjectDueDate(dueDate);
+            const projectStatus = (project as any).projectStatus as ProjectStatus | null | undefined;
+            const statusCfg = projectStatus ? PROJECT_STATUS_CONFIG[projectStatus] : null;
 
             return (
               <Card
@@ -458,7 +467,7 @@ export default function Projects() {
                       {/* Quick-add milestone button in card header */}
                       <button
                         className="h-7 w-7 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-primary/10 hover:bg-primary/20 text-primary"
-                        title="Add milestone to this rock"
+                        title="Add milestone to this project"
                         onClick={(e) => {
                           e.stopPropagation();
                           setQuickMilestoneProjectId(project.id);
@@ -576,13 +585,15 @@ export default function Projects() {
                     )}
                   </div>
 
-                  {/* Milestone preview list (first 3, collapsible) with inline editing */}
+                  {/* Milestone preview list (first 3, expandable/scrollable) with inline editing */}
                   {(() => {
-                    const preview = (project as any).milestonePreview as { id: number; title: string; completedAt: number | null; dueDate: number | null }[] | undefined;
-                    if (!preview || preview.length === 0) return null;
+                    const allMilestones = (project as any).milestonePreview as { id: number; title: string; completedAt: number | null; dueDate: number | null }[] | undefined;
+                    if (!allMilestones || allMilestones.length === 0) return null;
                     const isExpanded = expandedMilestones[project.id] ?? false;
+                    const preview = isExpanded ? allMilestones : allMilestones.slice(0, 3);
                     return (
                       <div className="space-y-1 mt-2" onClick={(e) => e.stopPropagation()}>
+                        <div className={isExpanded ? "max-h-40 overflow-y-auto space-y-1 pr-1" : "space-y-1"}>
                         {preview.map((m) => (
                           <div key={m.id} className="group flex items-center gap-2 text-xs">
                             <button
@@ -591,7 +602,10 @@ export default function Projects() {
                               }`}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toggleMilestoneMutation.mutate({ id: m.id, completed: !m.completedAt, projectId: project.id });
+                                toggleMilestoneMutation.mutate(
+                                  { id: m.id, completed: !m.completedAt, projectId: project.id },
+                                  { onError: (err: any) => toast.error(err.message) }
+                                );
                               }}
                               title={m.completedAt ? "Mark incomplete" : "Mark complete"}
                             >
@@ -650,7 +664,8 @@ export default function Projects() {
                             )}
                           </div>
                         ))}
-                        {milestoneTotal > 3 && (
+                        </div>
+                        {allMilestones.length > 3 && (
                           <button
                             className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary mt-0.5 transition-colors"
                             onClick={(e) => {
@@ -659,7 +674,7 @@ export default function Projects() {
                             }}
                           >
                             {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                            {isExpanded ? "Show less" : `+${milestoneTotal - 3} more`}
+                            {isExpanded ? "Show less" : `+${allMilestones.length - 3} more`}
                           </button>
                         )}
                       </div>
@@ -733,7 +748,7 @@ export default function Projects() {
                         }}
                       >
                         <Plus className="h-3 w-3" />
-                        Add milestone to this rock
+                        Add milestone to this project
                       </button>
                     </div>
                   )}
@@ -757,7 +772,7 @@ export default function Projects() {
         onSuccess={() => setEditProject(null)}
       />
 
-      {/* Milestone quick-add is now inline on each Rock card */}
+      {/* Milestone quick-add is now inline on each Project card */}
 
       <AlertDialog
         open={!!deleteProject}
@@ -765,18 +780,24 @@ export default function Projects() {
       >
         <AlertDialogContent className="bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Rock</AlertDialogTitle>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete{" "}
               <strong>"{deleteProject?.name}"</strong>? This will also delete
-              all tasks in this rock. This action cannot be undone.
+              all tasks in this project. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
-                deleteProject && deleteMutation.mutate(deleteProject.id)
+                deleteProject && deleteMutation.mutate(deleteProject.id, {
+                  onSuccess: () => {
+                    toast.success("Project deleted");
+                    setDeleteProject(null);
+                  },
+                  onError: (e: any) => toast.error(e.message),
+                })
               }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >

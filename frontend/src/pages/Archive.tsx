@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatDueDate, PRIORITY_BADGE_CLASS, PRIORITY_LABELS, type TaskPriority } from "@/lib/taskHelpers";
-import { trpc } from "@/lib/trpc";
+import { useArchivedTasks, useRestoreTask, usePermanentDeleteTask } from "@/hooks/useApi";
 import { Archive, Calendar, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -17,26 +17,9 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function ArchivePage() {
-  const utils = trpc.useUtils();
-  const { data: archived, isLoading } = trpc.tasks.listArchived.useQuery();
-
-  const restore = trpc.tasks.restore.useMutation({
-    onSuccess: () => {
-      toast.success("To-Do restored to Kanban board");
-      utils.tasks.listArchived.invalidate();
-      utils.tasks.listAll.invalidate();
-      utils.dashboard.stats.invalidate();
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const permanentDelete = trpc.tasks.permanentDelete.useMutation({
-    onSuccess: () => {
-      toast.success("To-Do permanently deleted");
-      utils.tasks.listArchived.invalidate();
-    },
-    onError: (err) => toast.error(err.message),
-  });
+  const { data: archived, isLoading } = useArchivedTasks();
+  const restore = useRestoreTask();
+  const permanentDelete = usePermanentDeleteTask();
 
   return (
     <div className="space-y-5">
@@ -120,7 +103,10 @@ export default function ArchivePage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => restore.mutate(task.id)}
+                    onClick={() => restore.mutate(task.id, {
+                      onSuccess: () => toast.success("To-Do restored to Kanban board"),
+                      onError: (err: any) => toast.error(err.message),
+                    })}
                     disabled={restore.isPending}
                     className="gap-1.5 text-xs flex-1 sm:flex-none"
                   >
@@ -149,7 +135,10 @@ export default function ArchivePage() {
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
-                          onClick={() => permanentDelete.mutate(task.id)}
+                          onClick={() => permanentDelete.mutate(task.id, {
+                            onSuccess: () => toast.success("To-Do permanently deleted"),
+                            onError: (err: any) => toast.error(err.message),
+                          })}
                           className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                           Delete permanently

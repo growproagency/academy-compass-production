@@ -22,7 +22,7 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/lib/taskHelpers";
-import { trpc } from "@/lib/trpc";
+import { useSubtasks, useToggleSubtask, useUpdateTask, useArchiveTask } from "@/hooks/useApi";
 import {
   AlertCircle,
   Archive,
@@ -75,41 +75,12 @@ export default function TaskBottomSheet({
   const { user: _currentUser } = useAuth();
   const [editOpen, setEditOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
-  const utils = trpc.useUtils();
-
   const isRight = side === "right";
 
-  const { data: subtasks } = trpc.subtasks.listByTask.useQuery(
-    { taskId: task?.id ?? 0 },
-    { enabled: !!task && open }
-  );
-
-  const toggleSubtask = trpc.subtasks.toggle.useMutation({
-    onSuccess: () => {
-      utils.subtasks.listByTask.invalidate({ taskId: task?.id });
-      utils.tasks.listAll.invalidate();
-    },
-  });
-
-  const updateStatus = trpc.tasks.update.useMutation({
-    onSuccess: () => {
-      utils.tasks.listAll.invalidate();
-      utils.dashboard.stats.invalidate();
-      onUpdated?.();
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const archiveTask = trpc.tasks.archive.useMutation({
-    onSuccess: () => {
-      toast.success("To-Do archived");
-      utils.tasks.listAll.invalidate();
-      utils.dashboard.stats.invalidate();
-      onOpenChange(false);
-      onUpdated?.();
-    },
-    onError: (err) => toast.error(err.message),
-  });
+  const { data: subtasks } = useSubtasks(task?.id ?? 0);
+  const toggleSubtask = useToggleSubtask();
+  const updateStatus = useUpdateTask();
+  const archiveTask = useArchiveTask();
 
   if (!task) return null;
 
@@ -135,7 +106,13 @@ export default function TaskBottomSheet({
 
   function handleMarkDone() {
     const newStatus: TaskStatus = isDone ? "todo" : "done";
-    updateStatus.mutate({ id: task!.id, status: newStatus });
+    updateStatus.mutate(
+      { id: task!.id, status: newStatus },
+      {
+        onSuccess: () => onUpdated?.(),
+        onError: (err: any) => toast.error(err.message),
+      }
+    );
     toast.success(isDone ? "To-Do reopened" : "To-Do marked as done! 🎉");
   }
 
@@ -143,7 +120,13 @@ export default function TaskBottomSheet({
     const cycle: TaskStatus[] = ["todo", "in_progress", "done"];
     const idx = cycle.indexOf(task!.status);
     const next = cycle[(idx + 1) % cycle.length];
-    updateStatus.mutate({ id: task!.id, status: next });
+    updateStatus.mutate(
+      { id: task!.id, status: next },
+      {
+        onSuccess: () => onUpdated?.(),
+        onError: (err: any) => toast.error(err.message),
+      }
+    );
     toast.success(`Moved to ${STATUS_META[next].label}`);
   }
 
@@ -233,7 +216,7 @@ export default function TaskBottomSheet({
                 )}
               </div>
 
-              {/* Rock */}
+              {/* Project */}
               {projectName && (
                 <div className="flex items-center gap-2">
                   <Mountain className="h-4 w-4 text-primary shrink-0" />
@@ -294,7 +277,7 @@ export default function TaskBottomSheet({
                           key={st.id}
                           className="w-full flex items-center gap-2.5 text-left group"
                           onClick={() =>
-                            toggleSubtask.mutate({ id: st.id, completed: !st.completed })
+                            toggleSubtask.mutate({ id: st.id, completed: !st.completed, taskId: task!.id })
                           }
                         >
                           <div
@@ -381,7 +364,10 @@ export default function TaskBottomSheet({
               <Button
                 variant="outline"
                 className="gap-2 text-destructive border-destructive/30 hover:bg-destructive/10"
-                onClick={() => archiveTask.mutate(task.id)}
+                onClick={() => archiveTask.mutate(task.id, {
+                  onSuccess: () => { toast.success("To-Do archived"); onOpenChange(false); onUpdated?.(); },
+                  onError: (err: any) => toast.error(err.message),
+                })}
                 disabled={archiveTask.isPending}
                 title="Archive"
               >

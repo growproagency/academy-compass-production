@@ -10,7 +10,13 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { trpc } from "@/lib/trpc";
+import {
+  useStrategicOrganizer,
+  useStrategicOrganizerVersions,
+  useUpsertStrategicOrganizer,
+  useRestoreStrategicOrganizerVersion,
+  useDeleteStrategicOrganizerVersion,
+} from "@/hooks/useApi";
 import {
   Calendar,
   Clock,
@@ -332,9 +338,9 @@ function BulletCard({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function StrategicOrganizer() {
-  const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.strategicOrganizer.get.useQuery();
-  const { data: versions } = trpc.strategicOrganizer.listVersions.useQuery();
+  const { data, isLoading } = useStrategicOrganizer();
+  const { data: _versions } = useStrategicOrganizerVersions();
+  const versions = _versions as any[] | undefined;
 
   // Simple text fields
   const [schoolName, setSchoolName] = useState("");
@@ -361,43 +367,23 @@ export default function StrategicOrganizer() {
   // Populate from server data
   useEffect(() => {
     if (!data) return;
-    setSchoolName(data.schoolName ?? "");
-    setMission(data.mission ?? "");
-    setIdealCustomerProfile(data.idealCustomerProfile ?? "");
-    setBhag(data.bhag ?? "");
-    setFocusOfTheYear(data.focusOfTheYear ?? "");
-    setValues(parseBulletList(data.values));
-    setParkingLot(parseBulletList(data.parkingLot));
-    setThreeYearVisual(parseGoalCard(data.threeYearVisual));
-    setOneYearGoal(parseGoalCard(data.oneYearGoal));
-    setNinetyDayProject(parseGoalCard(data.ninetyDayProject));
+    const d = data as any;
+    setSchoolName(d.schoolName ?? "");
+    setMission(d.mission ?? "");
+    setIdealCustomerProfile(d.idealCustomerProfile ?? "");
+    setBhag(d.bhag ?? "");
+    setFocusOfTheYear(d.focusOfTheYear ?? "");
+    setValues(parseBulletList(d.values));
+    setParkingLot(parseBulletList(d.parkingLot));
+    setThreeYearVisual(parseGoalCard(d.threeYearVisual));
+    setOneYearGoal(parseGoalCard(d.oneYearGoal));
+    setNinetyDayProject(parseGoalCard(d.ninetyDayProject));
     setDirty(false);
   }, [data]);
 
-  const upsert = trpc.strategicOrganizer.upsert.useMutation({
-    onSuccess: () => {
-      toast.success("Strategic Organizer saved");
-      utils.strategicOrganizer.get.invalidate();
-      utils.strategicOrganizer.listVersions.invalidate();
-      setDirty(false);
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const restoreVersion = trpc.strategicOrganizer.restoreVersion.useMutation({
-    onSuccess: () => {
-      utils.strategicOrganizer.get.invalidate();
-      utils.strategicOrganizer.listVersions.invalidate();
-      setHistoryOpen(false);
-      toast.success("Version restored — your organizer has been updated");
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const deleteVersion = trpc.strategicOrganizer.deleteVersion.useMutation({
-    onSuccess: () => utils.strategicOrganizer.listVersions.invalidate(),
-    onError: (e) => toast.error(e.message),
-  });
+  const upsert = useUpsertStrategicOrganizer();
+  const restoreVersion = useRestoreStrategicOrganizerVersion();
+  const deleteVersion = useDeleteStrategicOrganizerVersion();
 
   const buildPayload = () => ({
     schoolName,
@@ -422,7 +408,13 @@ export default function StrategicOrganizer() {
     saveVersion: true,
   });
 
-  const handleSave = () => upsert.mutate(buildPayload());
+  const handleSave = () => upsert.mutate(buildPayload(), {
+    onSuccess: () => {
+      toast.success("Strategic Organizer saved");
+      setDirty(false);
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   const handleDownloadPdf = async () => {
     setPdfLoading(true);
@@ -455,7 +447,7 @@ export default function StrategicOrganizer() {
           </div>` : ""}
           ${hasBullets ? `
           <div class="bullet-section">
-            <div class="bullet-label">Key Milestones</div>
+            <div class="bullet-label">Goals</div>
             <ul class="bullet-list">${bulletHtml(card.bullets)}</ul>
           </div>` : ""}
         </div>`;
@@ -495,13 +487,12 @@ export default function StrategicOrganizer() {
       font-family: 'Inter', system-ui, sans-serif;
       background: #f8f7f4;
       color: #1c1c1e;
-      min-height: 100vh;
       padding: 48px 40px;
     }
     /* ── Header ── */
     .header {
-      margin-bottom: 40px;
-      padding-bottom: 28px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
       border-bottom: 2px solid #e5e2db;
     }
     .header-top {
@@ -574,6 +565,8 @@ export default function StrategicOrganizer() {
       font-size: 13.5px;
       color: #333;
       line-height: 1.7;
+      word-break: break-word;
+      overflow-wrap: break-word;
     }
     /* ── Metrics ── */
     .metrics {
@@ -653,13 +646,13 @@ export default function StrategicOrganizer() {
   <div class="grid">
     ${mission ? simpleSectionHtml("Mission", mission, "🎯", "#3b82f6") : ""}
     ${bhag ? simpleSectionHtml("BHAG", bhag, "🚀", "#8b5cf6") : ""}
-    ${idealCustomerProfile ? `<div class="full">${simpleSectionHtml("Ideal Customer Profile", idealCustomerProfile, "👤", "#f59e0b")}</div>` : ""}
-    ${focusOfTheYear ? simpleSectionHtml("Focus of the Year", focusOfTheYear, "⭐", "#ec4899") : ""}
+    ${idealCustomerProfile ? simpleSectionHtml("Ideal Customer Profile", idealCustomerProfile, "👤", "#f59e0b") : ""}
     ${bulletSectionHtml("Core Values", values, "💎", "#10b981")}
     <div class="full">${goalCardHtml(threeYearVisual, "3-Year Vision", "#6366f1", "🏔️")}</div>
     ${goalCardHtml(oneYearGoal, "1-Year Goal", "#0ea5e9", "📅")}
     ${goalCardHtml(ninetyDayProject, "90-Day Project", "#f97316", "⚡")}
     ${bulletSectionHtml("Parking Lot", parkingLot, "🅿️", "#94a3b8")}
+    ${simpleSectionHtml("Focus of the Year", focusOfTheYear || "—", "⭐", "#ec4899")}
   </div>
 </body>
 </html>`;
@@ -703,15 +696,16 @@ export default function StrategicOrganizer() {
       const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: "a4" });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
-      const imgW = pageW;
-      const imgH = (canvas.height * pageW) / canvas.width;
 
-      let y = 0;
-      while (y < imgH) {
-        if (y > 0) pdf.addPage();
-        pdf.addImage(imgData, "JPEG", 0, -y, imgW, imgH);
-        y += pageH;
-      }
+      // Scale to fit entire content on one page
+      const scaleToFitW = pageW / canvas.width;
+      const scaleToFitH = pageH / canvas.height;
+      const scale = Math.min(scaleToFitW, scaleToFitH);
+      const imgW = canvas.width * scale;
+      const imgH = canvas.height * scale;
+      const offsetX = (pageW - imgW) / 2;
+
+      pdf.addImage(imgData, "JPEG", offsetX, 0, imgW, imgH);
 
       const filename = `${schoolName.trim().replace(/\s+/g, "-").toLowerCase() || "strategic-organizer"}.pdf`;
       pdf.save(filename);
@@ -822,13 +816,21 @@ export default function StrategicOrganizer() {
                             variant="outline"
                             className="h-7 px-2 gap-1 text-xs"
                             disabled={restoreVersion.isPending}
-                            onClick={() => restoreVersion.mutate(v.id)}
+                            onClick={() => restoreVersion.mutate(v.id, {
+                              onSuccess: () => {
+                                setHistoryOpen(false);
+                                toast.success("Version restored — your organizer has been updated");
+                              },
+                              onError: (e: any) => toast.error(e.message),
+                            })}
                           >
                             <RotateCcw className="h-3 w-3" />
                             Restore
                           </Button>
                           <button
-                            onClick={() => deleteVersion.mutate(v.id)}
+                            onClick={() => deleteVersion.mutate(v.id, {
+                              onError: (e: any) => toast.error(e.message),
+                            })}
                             className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-destructive transition-colors"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
