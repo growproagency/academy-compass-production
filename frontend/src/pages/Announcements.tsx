@@ -1,4 +1,3 @@
-import { useAuth } from "@/hooks/useAuth";
 import {
   useAnnouncements,
   useCreateAnnouncement,
@@ -141,10 +140,8 @@ function AnnouncementForm({
 }
 
 export default function Announcements() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
-
-  const { data: announcements, isLoading } = useAnnouncements();
+  const { data: announcementsRaw, isLoading } = useAnnouncements();
+  const announcements = announcementsRaw as Announcement[] | undefined;
 
   const createMutation = useCreateAnnouncement();
   const updateMutation = useUpdateAnnouncement();
@@ -348,25 +345,23 @@ function AnnouncementCard({
               )}
             </div>
           </div>
-          {isAdmin && (
-            <DropdownMenu>
-              <DropdownMenuTrigger className="h-7 w-7 shrink-0 inline-flex items-center justify-center rounded-md hover:bg-accent text-muted-foreground outline-none">
-                <MoreVertical className="h-4 w-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onTogglePin} className="gap-2">
-                  {a.isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-                  {a.isPinned ? "Unpin" : "Pin to top"}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onEdit} className="gap-2">
-                  <Pencil className="h-4 w-4" /> Edit
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onDelete} className="gap-2 text-destructive focus:text-destructive">
-                  <Trash2 className="h-4 w-4" /> Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger className="h-7 w-7 shrink-0 inline-flex items-center justify-center rounded-md hover:bg-accent text-muted-foreground outline-none">
+              <MoreVertical className="h-4 w-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onTogglePin} className="gap-2">
+                {a.isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                {a.isPinned ? "Unpin" : "Pin to top"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onEdit} className="gap-2">
+                <Pencil className="h-4 w-4" /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onDelete} className="gap-2 text-destructive focus:text-destructive">
+                <Trash2 className="h-4 w-4" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </CardContent>
     </Card>
