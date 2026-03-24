@@ -208,6 +208,7 @@ export default function Announcements() {
             <AnnouncementCard
               key={a.id}
               announcement={a}
+              isAdmin={isAdmin}
               onEdit={() => setEditTarget(a)}
               onDelete={() => setDeleteTarget(a)}
               onTogglePin={() => togglePinMutation.mutate(
@@ -229,6 +230,7 @@ export default function Announcements() {
             <AnnouncementCard
               key={a.id}
               announcement={a}
+              isAdmin={isAdmin}
               onEdit={() => setEditTarget(a)}
               onDelete={() => setDeleteTarget(a)}
               onTogglePin={() => togglePinMutation.mutate(
@@ -307,11 +309,13 @@ export default function Announcements() {
 
 function AnnouncementCard({
   announcement: a,
+  isAdmin,
   onEdit,
   onDelete,
   onTogglePin,
 }: {
   announcement: Announcement;
+  isAdmin: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onTogglePin: () => void;
