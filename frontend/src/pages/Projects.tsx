@@ -22,7 +22,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 // TaskDialog removed — milestone quick-add is now inline on the Project card
-import { trpc } from "@/lib/trpc";
+import {
+  useProjectsWithStats,
+  useUsers,
+  useCreateProject,
+  useUpdateProject,
+  useDeleteProject,
+  useCreateMilestone,
+  useUpdateMilestone,
+  useToggleMilestone,
+  QK,
+} from "@/hooks/useApi";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Calendar,
@@ -135,7 +146,7 @@ function ProjectFormDialog({
   const [description, setDescription] = useState("");
   const [dueDateStr, setDueDateStr] = useState(""); // "YYYY-MM-DD" from <input type="date">
   const [projectStatus, setProjectStatus] = useState<ProjectStatus | "">("on_track");
-  const utils = trpc.useUtils();
+  const qc = useQueryClient();
 
   useEffect(() => {
     if (open) {
@@ -155,25 +166,8 @@ function ProjectFormDialog({
     }
   }, [open, project]);
 
-  const create = trpc.projects.create.useMutation({
-    onSuccess: () => {
-      toast.success("Project created");
-      utils.projects.list.invalidate();
-      utils.projects.listWithStats.invalidate();
-      onSuccess?.();
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const update = trpc.projects.update.useMutation({
-    onSuccess: () => {
-      toast.success("Project updated");
-      utils.projects.list.invalidate();
-      utils.projects.listWithStats.invalidate();
-      onSuccess?.();
-    },
-    onError: (e) => toast.error(e.message),
-  });
+  const create = useCreateProject();
+  const update = useUpdateProject();
 
   const isPending = create.isPending || update.isPending;
 
@@ -186,20 +180,42 @@ function ProjectFormDialog({
       : null;
 
     if (project) {
-      update.mutate({
-        id: project.id,
-        name: name.trim(),
-        description: description.trim() || undefined,
-        dueDate,
-        projectStatus: projectStatus || undefined,
-      });
+      update.mutate(
+        {
+          id: project.id,
+          name: name.trim(),
+          description: description.trim() || undefined,
+          dueDate,
+          projectStatus: projectStatus || undefined,
+        },
+        {
+          onSuccess: () => {
+            toast.success("Project updated");
+            qc.invalidateQueries({ queryKey: QK.projects });
+            qc.invalidateQueries({ queryKey: QK.projectsWithStats });
+            onSuccess?.();
+          },
+          onError: (e: any) => toast.error(e.message),
+        }
+      );
     } else {
-      create.mutate({
-        name: name.trim(),
-        description: description.trim() || undefined,
-        dueDate,
-        projectStatus: projectStatus || undefined,
-      });
+      create.mutate(
+        {
+          name: name.trim(),
+          description: description.trim() || undefined,
+          dueDate,
+          projectStatus: projectStatus || undefined,
+        },
+        {
+          onSuccess: () => {
+            toast.success("Project created");
+            qc.invalidateQueries({ queryKey: QK.projects });
+            qc.invalidateQueries({ queryKey: QK.projectsWithStats });
+            onSuccess?.();
+          },
+          onError: (e: any) => toast.error(e.message),
+        }
+      );
     }
   };
 
@@ -298,34 +314,11 @@ export default function Projects() {
   const [editingMilestoneId, setEditingMilestoneId] = useState<number | null>(null);
   const [editingMilestoneTitle, setEditingMilestoneTitle] = useState("");
   const [editingMilestoneDueDate, setEditingMilestoneDueDate] = useState("");
-  const utils = trpc.useUtils();
+  const qc = useQueryClient();
 
-  const createMilestoneMutation = trpc.milestones.create.useMutation({
-    onSuccess: () => {
-      setQuickMilestoneProjectId(null);
-      setQuickMilestoneTitle("");
-      setQuickMilestoneDueDate("");
-      setQuickMilestonePending(false);
-      toast.success("Milestone added");
-    },
-    onError: (err) => {
-      toast.error(err.message);
-      setQuickMilestonePending(false);
-    },
-  });
-
-  const toggleMilestoneMutation = trpc.milestones.toggle.useMutation({
-    onError: (err) => toast.error(err.message),
-  });
-
-  const updateMilestoneMutation = trpc.milestones.update.useMutation({
-    onSuccess: () => {
-      utils.projects.listWithStats.invalidate();
-      setEditingMilestoneId(null);
-      toast.success("Milestone updated");
-    },
-    onError: (err) => toast.error(err.message),
-  });
+  const createMilestoneMutation = useCreateMilestone();
+  const toggleMilestoneMutation = useToggleMilestone();
+  const updateMilestoneMutation = useUpdateMilestone();
 
   const handleMilestoneEditSave = (id: number) => {
     const title = editingMilestoneTitle.trim();
@@ -333,7 +326,17 @@ export default function Projects() {
     const dueDate = editingMilestoneDueDate
       ? new Date(editingMilestoneDueDate + "T00:00:00").getTime()
       : null;
-    updateMilestoneMutation.mutate({ id, title, dueDate });
+    updateMilestoneMutation.mutate(
+      { id, title, dueDate },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: QK.projectsWithStats });
+          setEditingMilestoneId(null);
+          toast.success("Milestone updated");
+        },
+        onError: (err: any) => toast.error(err.message),
+      }
+    );
   };
 
   const handleQuickMilestoneSubmit = (projectId: number) => {
@@ -341,21 +344,28 @@ export default function Projects() {
     if (!title) return;
     setQuickMilestonePending(true);
     const dueDateTs = quickMilestoneDueDate ? new Date(quickMilestoneDueDate).getTime() : undefined;
-    createMilestoneMutation.mutate({ projectId, title, dueDate: dueDateTs });
+    createMilestoneMutation.mutate(
+      { projectId, title, dueDate: dueDateTs },
+      {
+        onSuccess: () => {
+          setQuickMilestoneProjectId(null);
+          setQuickMilestoneTitle("");
+          setQuickMilestoneDueDate("");
+          setQuickMilestonePending(false);
+          toast.success("Milestone added");
+        },
+        onError: (err: any) => {
+          toast.error(err.message);
+          setQuickMilestonePending(false);
+        },
+      }
+    );
   };
 
-  const { data: projects, isLoading } = trpc.projects.listWithStats.useQuery();
-  const { data: users } = trpc.users.list.useQuery();
+  const { data: projects, isLoading } = useProjectsWithStats();
+  const { data: users } = useUsers();
 
-  const deleteMutation = trpc.projects.delete.useMutation({
-    onSuccess: () => {
-      toast.success("Project deleted");
-      utils.projects.listWithStats.invalidate();
-      utils.projects.list.invalidate();
-      setDeleteProject(null);
-    },
-    onError: (e) => toast.error(e.message),
-  });
+  const deleteMutation = useDeleteProject();
 
   const getOwnerName = (ownerId: number) =>
     users?.find((u) => u.id === ownerId)?.name ?? "Unknown";
@@ -592,7 +602,10 @@ export default function Projects() {
                               }`}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toggleMilestoneMutation.mutate({ id: m.id, completed: !m.completedAt, projectId: project.id });
+                                toggleMilestoneMutation.mutate(
+                                  { id: m.id, completed: !m.completedAt, projectId: project.id },
+                                  { onError: (err: any) => toast.error(err.message) }
+                                );
                               }}
                               title={m.completedAt ? "Mark incomplete" : "Mark complete"}
                             >
@@ -778,7 +791,13 @@ export default function Projects() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
-                deleteProject && deleteMutation.mutate(deleteProject.id)
+                deleteProject && deleteMutation.mutate(deleteProject.id, {
+                  onSuccess: () => {
+                    toast.success("Project deleted");
+                    setDeleteProject(null);
+                  },
+                  onError: (e: any) => toast.error(e.message),
+                })
               }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >

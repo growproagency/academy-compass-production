@@ -1,5 +1,5 @@
 import { useAuth } from "@/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
+import { useUserScorecard } from "@/hooks/useApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,10 +79,7 @@ export default function MemberScorecard() {
   const [, navigate] = useLocation();
   const { user: currentUser } = useAuth();
 
-  const { data, isLoading, error } = trpc.users.scorecard.useQuery(
-    { userId },
-    { enabled: !!userId && !isNaN(userId) }
-  );
+  const { data, isLoading, error } = useUserScorecard(userId);
 
   if (isLoading) {
     return (

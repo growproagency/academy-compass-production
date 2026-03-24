@@ -1,5 +1,11 @@
 import { useAuth } from "@/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
+import {
+  useAnnouncements,
+  useCreateAnnouncement,
+  useUpdateAnnouncement,
+  useDeleteAnnouncement,
+  useTogglePinAnnouncement,
+} from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -137,29 +143,13 @@ function AnnouncementForm({
 export default function Announcements() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
-  const utils = trpc.useUtils();
 
-  const { data: announcements, isLoading } = trpc.announcements.list.useQuery();
+  const { data: announcements, isLoading } = useAnnouncements();
 
-  const createMutation = trpc.announcements.create.useMutation({
-    onSuccess: () => { utils.announcements.list.invalidate(); setCreateOpen(false); toast.success("Announcement posted."); },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const updateMutation = trpc.announcements.update.useMutation({
-    onSuccess: () => { utils.announcements.list.invalidate(); setEditTarget(null); toast.success("Announcement updated."); },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const deleteMutation = trpc.announcements.delete.useMutation({
-    onSuccess: () => { utils.announcements.list.invalidate(); setDeleteTarget(null); toast.success("Announcement deleted."); },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const togglePinMutation = trpc.announcements.togglePin.useMutation({
-    onSuccess: () => utils.announcements.list.invalidate(),
-    onError: (err) => toast.error(err.message),
-  });
+  const createMutation = useCreateAnnouncement();
+  const updateMutation = useUpdateAnnouncement();
+  const deleteMutation = useDeleteAnnouncement();
+  const togglePinMutation = useTogglePinAnnouncement();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Announcement | null>(null);
@@ -225,7 +215,10 @@ export default function Announcements() {
               isAdmin={isAdmin}
               onEdit={() => setEditTarget(a)}
               onDelete={() => setDeleteTarget(a)}
-              onTogglePin={() => togglePinMutation.mutate({ id: a.id, isPinned: !a.isPinned })}
+              onTogglePin={() => togglePinMutation.mutate(
+                { id: a.id, isPinned: !a.isPinned },
+                { onError: (err: any) => toast.error(err.message) }
+              )}
             />
           ))}
         </div>
@@ -244,7 +237,10 @@ export default function Announcements() {
               isAdmin={isAdmin}
               onEdit={() => setEditTarget(a)}
               onDelete={() => setDeleteTarget(a)}
-              onTogglePin={() => togglePinMutation.mutate({ id: a.id, isPinned: !a.isPinned })}
+              onTogglePin={() => togglePinMutation.mutate(
+                { id: a.id, isPinned: !a.isPinned },
+                { onError: (err: any) => toast.error(err.message) }
+              )}
             />
           ))}
         </div>
@@ -257,7 +253,10 @@ export default function Announcements() {
             <DialogTitle>Post Announcement</DialogTitle>
           </DialogHeader>
           <AnnouncementForm
-            onSave={(data) => createMutation.mutate(data)}
+            onSave={(data) => createMutation.mutate(data, {
+              onSuccess: () => { setCreateOpen(false); toast.success("Announcement posted."); },
+              onError: (err: any) => toast.error(err.message),
+            })}
             onCancel={() => setCreateOpen(false)}
             isSaving={createMutation.isPending}
           />
@@ -274,7 +273,10 @@ export default function Announcements() {
             <AnnouncementForm
               key={editTarget.id}
               initial={editTarget}
-              onSave={(data) => updateMutation.mutate({ id: editTarget.id, ...data })}
+              onSave={(data) => updateMutation.mutate({ id: editTarget.id, ...data }, {
+                onSuccess: () => { setEditTarget(null); toast.success("Announcement updated."); },
+                onError: (err: any) => toast.error(err.message),
+              })}
               onCancel={() => setEditTarget(null)}
               isSaving={updateMutation.isPending}
             />
@@ -295,7 +297,10 @@ export default function Announcements() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id, {
+                onSuccess: () => { setDeleteTarget(null); toast.success("Announcement deleted."); },
+                onError: (err: any) => toast.error(err.message),
+              })}
             >
               Delete
             </AlertDialogAction>

@@ -16,7 +16,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { trpc } from "@/lib/trpc";
+import {
+  useProjects,
+  useProjectMembers,
+  useUsers,
+  useSubtasks,
+  useCreateSubtask,
+  useToggleSubtask,
+  useDeleteSubtask,
+  useCreateTask,
+  useUpdateTask,
+  QK,
+} from "@/hooks/useApi";
+import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   Loader2,
@@ -70,7 +82,7 @@ export default function TaskDialog({
   onSuccess,
 }: Props) {
   const isEdit = !!task;
-  const utils = trpc.useUtils();
+  const qc = useQueryClient();
 
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -91,34 +103,21 @@ export default function TaskDialog({
   const subtaskInputRef = useRef<HTMLInputElement>(null);
 
   // For standalone creation (no projectId passed), allow user to optionally link a Project
-  const { data: allProjects } = trpc.projects.list.useQuery(undefined, { enabled: !projectId });
+  const { data: allProjects } = useProjects();
   const effectiveProjectId = projectId ?? (selectedProjectId ? parseInt(selectedProjectId) : null);
-  const { data: members } = trpc.projects.members.list.useQuery(
-    { projectId: effectiveProjectId! },
-    { enabled: !!effectiveProjectId }
-  );
+  const { data: members } = useProjectMembers(effectiveProjectId ?? 0);
   // When no project is linked, fall back to all org users so any user can be assigned
-  const { data: allUsers } = trpc.users.list.useQuery(undefined, { enabled: !effectiveProjectId });
+  const { data: allUsers } = useUsers();
   const assignableUsers = effectiveProjectId
     ? (members ?? []).map((m: any) => ({ id: m.userId, name: m.user?.name, email: m.user?.email }))
     : (allUsers ?? []).map((u: any) => ({ id: u.id, name: u.name, email: u.email }));
 
   // Existing subtasks (edit mode)
-  const { data: existingSubtasks, refetch: refetchSubtasks } = trpc.subtasks.listByTask.useQuery(
-    { taskId: task?.id ?? 0 },
-    { enabled: isEdit && open && !!task?.id }
-  );
+  const { data: existingSubtasks } = useSubtasks(task?.id ?? 0);
 
-  const createSubtaskMutation = trpc.subtasks.create.useMutation({
-    onSuccess: () => refetchSubtasks(),
-    onError: (err) => toast.error(err.message),
-  });
-  const toggleSubtaskMutation = trpc.subtasks.toggle.useMutation({
-    onSuccess: () => refetchSubtasks(),
-  });
-  const deleteSubtaskMutation = trpc.subtasks.delete.useMutation({
-    onSuccess: () => refetchSubtasks(),
-  });
+  const createSubtaskMutation = useCreateSubtask();
+  const toggleSubtaskMutation = useToggleSubtask();
+  const deleteSubtaskMutation = useDeleteSubtask();
 
   useEffect(() => {
     if (open) {
@@ -141,30 +140,13 @@ export default function TaskDialog({
   }, [open, task, defaultStatus]);
 
   const invalidate = () => {
-    utils.tasks.listAll.invalidate();
-    if (effectiveProjectId) utils.tasks.listByProject.invalidate({ projectId: effectiveProjectId });
-    utils.dashboard.stats.invalidate();
+    qc.invalidateQueries({ queryKey: QK.tasks });
+    if (effectiveProjectId) qc.invalidateQueries({ queryKey: QK.tasksByProject(effectiveProjectId) });
+    qc.invalidateQueries({ queryKey: QK.dashboardStats });
   };
 
-  const createTask = trpc.tasks.create.useMutation({
-    onSuccess: () => {
-      toast.success("To-Do created");
-      invalidate();
-      onOpenChange(false);
-      onSuccess?.();
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const updateTask = trpc.tasks.update.useMutation({
-    onSuccess: () => {
-      toast.success("To-Do updated");
-      invalidate();
-      onOpenChange(false);
-      onSuccess?.();
-    },
-    onError: (err) => toast.error(err.message),
-  });
+  const createTask = useCreateTask();
+  const updateTask = useUpdateTask();
 
   const isPending = createTask.isPending || updateTask.isPending;
 
@@ -205,20 +187,42 @@ export default function TaskDialog({
     };
 
     if (isEdit && task) {
-      updateTask.mutate({
-        id: task.id,
-        ...payload,
-        assigneeId: assigneeId ? parseInt(assigneeId) : null,
-        dueDate: dueDate ? dueDate.getTime() : null,
-        recurrenceEndsAt: recurrenceEndsAt ? recurrenceEndsAt.getTime() : null,
-        notes: notes.trim() || null,
-        description: null,
-      });
+      updateTask.mutate(
+        {
+          id: task.id,
+          ...payload,
+          assigneeId: assigneeId ? parseInt(assigneeId) : null,
+          dueDate: dueDate ? dueDate.getTime() : null,
+          recurrenceEndsAt: recurrenceEndsAt ? recurrenceEndsAt.getTime() : null,
+          notes: notes.trim() || null,
+          description: null,
+        },
+        {
+          onSuccess: () => {
+            toast.success("To-Do updated");
+            invalidate();
+            onOpenChange(false);
+            onSuccess?.();
+          },
+          onError: (err: any) => toast.error(err.message),
+        }
+      );
     } else {
-      createTask.mutate({
-        ...payload,
-        subtasks: subtaskDrafts.map((s) => s.title),
-      });
+      createTask.mutate(
+        {
+          ...payload,
+          subtasks: subtaskDrafts.map((s) => s.title),
+        },
+        {
+          onSuccess: () => {
+            toast.success("To-Do created");
+            invalidate();
+            onOpenChange(false);
+            onSuccess?.();
+          },
+          onError: (err: any) => toast.error(err.message),
+        }
+      );
     }
   };
 

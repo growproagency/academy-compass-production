@@ -37,7 +37,25 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/lib/taskHelpers";
-import { trpc } from "@/lib/trpc";
+import {
+  useProject,
+  useTasksByProject,
+  useProjectMembers,
+  useUsers,
+  useMilestones,
+  useProjectComments,
+  useAddProjectMember,
+  useRemoveProjectMember,
+  useToggleMilestone,
+  useUpdateProject,
+  useDeleteMilestone,
+  useUpdateMilestone,
+  useCreateMilestone,
+  useCreateProjectComment,
+  useDeleteProjectComment,
+  QK,
+} from "@/hooks/useApi";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   CalendarDays,
@@ -79,35 +97,40 @@ function MilestoneDialog({
   const [dueDate, setDueDate] = useState(
     milestone?.dueDate ? new Date(milestone.dueDate).toISOString().split("T")[0] : ""
   );
-  const utils = trpc.useUtils();
+  const qc = useQueryClient();
 
-  const create = trpc.milestones.create.useMutation({
-    onSuccess: () => {
-      toast.success("Milestone created");
-      utils.milestones.list.invalidate({ projectId });
-      onSuccess();
-      onOpenChange(false);
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const update = trpc.milestones.update.useMutation({
-    onSuccess: () => {
-      toast.success("Milestone updated");
-      utils.milestones.list.invalidate({ projectId });
-      onSuccess();
-      onOpenChange(false);
-    },
-    onError: (e) => toast.error(e.message),
-  });
+  const create = useCreateMilestone();
+  const update = useUpdateMilestone();
 
   const handleSubmit = () => {
     if (!title.trim()) return;
     const dueDateMs = dueDate ? new Date(dueDate).getTime() : undefined;
     if (milestone) {
-      update.mutate({ id: milestone.id, title: title.trim(), description: description.trim() || undefined, dueDate: dueDateMs ?? null });
+      update.mutate(
+        { id: milestone.id, projectId, title: title.trim(), description: description.trim() || undefined, dueDate: dueDateMs ?? null },
+        {
+          onSuccess: () => {
+            toast.success("Milestone updated");
+            qc.invalidateQueries({ queryKey: QK.milestones(projectId) });
+            onSuccess();
+            onOpenChange(false);
+          },
+          onError: (e: any) => toast.error(e.message),
+        }
+      );
     } else {
-      create.mutate({ projectId, title: title.trim(), description: description.trim() || undefined, dueDate: dueDateMs });
+      create.mutate(
+        { projectId, title: title.trim(), description: description.trim() || undefined, dueDate: dueDateMs },
+        {
+          onSuccess: () => {
+            toast.success("Milestone created");
+            qc.invalidateQueries({ queryKey: QK.milestones(projectId) });
+            onSuccess();
+            onOpenChange(false);
+          },
+          onError: (e: any) => toast.error(e.message),
+        }
+      );
     }
   };
 
@@ -172,7 +195,7 @@ export default function ProjectDetail() {
     id: number; title: string; description: string | null; dueDate: number | null;
   } | undefined>(undefined);
   const [deleteMilestoneId, setDeleteMilestoneId] = useState<number | null>(null);
-  const utils = trpc.useUtils();
+  const qc = useQueryClient();
 
   // Project status config
   const PROJECT_STATUS_CONFIG = {
@@ -183,82 +206,18 @@ export default function ProjectDetail() {
   } as const;
   type ProjectStatus = keyof typeof PROJECT_STATUS_CONFIG;
 
-  const { data: project, isLoading: projectLoading } = trpc.projects.getById.useQuery({ id: projectId });
-  const { data: tasks, isLoading: tasksLoading } = trpc.tasks.listByProject.useQuery({ projectId });
-  const { data: members } = trpc.projects.members.list.useQuery({ projectId });
-  const { data: allUsers } = trpc.users.list.useQuery();
-  const { data: milestones, isLoading: milestonesLoading } = trpc.milestones.list.useQuery({ projectId });
+  const { data: project, isLoading: projectLoading } = useProject(projectId);
+  const { data: tasks, isLoading: tasksLoading } = useTasksByProject(projectId);
+  const { data: members } = useProjectMembers(projectId);
+  const { data: allUsers } = useUsers();
+  const { data: milestones, isLoading: milestonesLoading } = useMilestones(projectId);
 
-  const addMember = trpc.projects.members.add.useMutation({
-    onSuccess: () => {
-      toast.success("Member added");
-      utils.projects.members.list.invalidate({ projectId });
-      setAddMemberOpen(false);
-      setSelectedUserId("");
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const removeMember = trpc.projects.members.remove.useMutation({
-    onSuccess: () => {
-      toast.success("Member removed");
-      utils.projects.members.list.invalidate({ projectId });
-      setRemoveMemberId(null);
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const toggleMilestone = trpc.milestones.toggle.useMutation({
-    onSuccess: (_, vars) => {
-      utils.milestones.list.invalidate({ projectId }).then(() => {
-        // Check if all milestones are now complete after this toggle
-        const updated = (milestones ?? []).map((m) =>
-          m.id === vars.id ? { ...m, completedAt: vars.completed ? new Date().toISOString() : null } : m
-        );
-        const allDone = updated.length > 0 && updated.every((m) => m.completedAt !== null);
-        if (allDone && vars.completed) {
-          fireConfetti();
-          setCelebrateOpen(true);
-        }
-      });
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const updateProjectStatus = trpc.projects.update.useMutation({
-    onMutate: async ({ projectStatus }) => {
-      // Optimistic update
-      await utils.projects.getById.cancel({ id: projectId });
-      const prev = utils.projects.getById.getData({ id: projectId });
-      if (prev && projectStatus !== undefined) {
-        utils.projects.getById.setData({ id: projectId }, { ...prev, projectStatus: projectStatus ?? null });
-      }
-      return { prev };
-    },
-    onError: (_e, _v, ctx) => {
-      if (ctx?.prev) utils.projects.getById.setData({ id: projectId }, ctx.prev);
-      toast.error("Failed to update status");
-    },
-    onSuccess: () => {
-      utils.projects.getById.invalidate({ id: projectId });
-      utils.projects.listWithStats.invalidate();
-      toast.success("Project status updated");
-    },
-  });
-
-  const deleteMilestone = trpc.milestones.delete.useMutation({
-    onSuccess: () => {
-      toast.success("Milestone deleted");
-      utils.milestones.list.invalidate({ projectId });
-      setDeleteMilestoneId(null);
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const updateMilestoneDueDate = trpc.milestones.update.useMutation({
-    onSuccess: () => utils.milestones.list.invalidate({ projectId }),
-    onError: (e) => toast.error(e.message),
-  });
+  const addMember = useAddProjectMember();
+  const removeMember = useRemoveProjectMember();
+  const toggleMilestone = useToggleMilestone();
+  const updateProjectStatus = useUpdateProject();
+  const deleteMilestone = useDeleteMilestone();
+  const updateMilestoneDueDate = useUpdateMilestone();
 
   // ── Milestone celebration ─────────────────────────────────────────────────
   const [celebrateOpen, setCelebrateOpen] = useState(false);
@@ -321,24 +280,20 @@ export default function ProjectDetail() {
       )
     );
   };
-  const { data: comments, isLoading: commentsLoading } = trpc.projectComments.list.useQuery({ projectId });
+  const { data: comments, isLoading: commentsLoading } = useProjectComments(projectId);
 
-  const addComment = trpc.projectComments.create.useMutation({
-    onSuccess: () => {
-      utils.projectComments.list.invalidate({ projectId });
-      setCommentText("");
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const deleteComment = trpc.projectComments.delete.useMutation({
-    onSuccess: () => utils.projectComments.list.invalidate({ projectId }),
-    onError: (e) => toast.error(e.message),
-  });
+  const addComment = useCreateProjectComment();
+  const deleteComment = useDeleteProjectComment();
 
   const handleAddComment = () => {
     if (!commentText.trim()) return;
-    addComment.mutate({ projectId, content: commentText.trim() });
+    addComment.mutate(
+      { projectId, content: commentText.trim() },
+      {
+        onSuccess: () => setCommentText(""),
+        onError: (e: any) => toast.error(e.message),
+      }
+    );
   };
 
   if (projectLoading) {
@@ -406,7 +361,13 @@ export default function ProjectDetail() {
               <Select
                 value={project.projectStatus ?? ""}
                 onValueChange={(val) =>
-                  updateProjectStatus.mutate({ id: projectId, projectStatus: val as ProjectStatus })
+                  updateProjectStatus.mutate(
+                    { id: projectId, projectStatus: val as ProjectStatus },
+                    {
+                      onSuccess: () => toast.success("Project status updated"),
+                      onError: () => toast.error("Failed to update status"),
+                    }
+                  )
                 }
               >
                 <SelectTrigger
@@ -524,7 +485,24 @@ export default function ProjectDetail() {
                       }`}
                     >
                       <button
-                        onClick={() => toggleMilestone.mutate({ id: m.id, completed: !isComplete, projectId })}
+                        onClick={() => toggleMilestone.mutate(
+                          { id: m.id, completed: !isComplete, projectId },
+                          {
+                            onSuccess: (_data: any, vars: any) => {
+                              qc.invalidateQueries({ queryKey: QK.milestones(projectId) }).then(() => {
+                                const updated = (milestones ?? []).map((ms: any) =>
+                                  ms.id === vars.id ? { ...ms, completedAt: vars.completed ? new Date().toISOString() : null } : ms
+                                );
+                                const allDone = updated.length > 0 && updated.every((ms: any) => ms.completedAt !== null);
+                                if (allDone && vars.completed) {
+                                  fireConfetti();
+                                  setCelebrateOpen(true);
+                                }
+                              });
+                            },
+                            onError: (e: any) => toast.error(e.message),
+                          }
+                        )}
                         className="mt-0.5 shrink-0 text-muted-foreground hover:text-primary transition-colors"
                       >
                         {isComplete ? (
@@ -550,7 +528,10 @@ export default function ProjectDetail() {
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   const ms = val ? new Date(val).getTime() : null;
-                                  updateMilestoneDueDate.mutate({ id: m.id, dueDate: ms, projectId });
+                                  updateMilestoneDueDate.mutate(
+                                    { id: m.id, dueDate: ms, projectId },
+                                    { onError: (e: any) => toast.error(e.message) }
+                                  );
                                 }}
                                 className="bg-transparent border-none outline-none text-xs cursor-pointer"
                               />
@@ -687,7 +668,10 @@ export default function ProjectDetail() {
                   </div>
                   {(c.authorId === user?.id || user?.role === "admin") && (
                     <button
-                      onClick={() => deleteComment.mutate({ id: c.id, projectId })}
+                      onClick={() => deleteComment.mutate(
+                        { id: c.id, projectId },
+                        { onError: (e: any) => toast.error(e.message) }
+                      )}
                       className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-destructive shrink-0"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -797,7 +781,13 @@ export default function ProjectDetail() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleteMilestoneId !== null && deleteMilestone.mutate({ id: deleteMilestoneId, projectId })}
+              onClick={() => deleteMilestoneId !== null && deleteMilestone.mutate(
+                { id: deleteMilestoneId, projectId },
+                {
+                  onSuccess: () => { setDeleteMilestoneId(null); toast.success("Milestone deleted."); },
+                  onError: (e: any) => toast.error(e.message),
+                }
+              )}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
@@ -831,7 +821,13 @@ export default function ProjectDetail() {
             <Button variant="outline" onClick={() => setAddMemberOpen(false)}>Cancel</Button>
             <Button
               disabled={!selectedUserId || selectedUserId === "none" || addMember.isPending}
-              onClick={() => selectedUserId && addMember.mutate({ projectId, userId: parseInt(selectedUserId) })}
+              onClick={() => selectedUserId && addMember.mutate(
+                { projectId, userId: parseInt(selectedUserId) },
+                {
+                  onSuccess: () => { setAddMemberOpen(false); setSelectedUserId(""); toast.success("Member added."); },
+                  onError: (e: any) => toast.error(e.message),
+                }
+              )}
             >
               {addMember.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Add Member
@@ -884,7 +880,13 @@ export default function ProjectDetail() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => removeMemberId !== null && removeMember.mutate({ projectId, userId: removeMemberId })}
+              onClick={() => removeMemberId !== null && removeMember.mutate(
+                { projectId, userId: removeMemberId },
+                {
+                  onSuccess: () => { setRemoveMemberId(null); toast.success("Member removed."); },
+                  onError: (e: any) => toast.error(e.message),
+                }
+              )}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Remove

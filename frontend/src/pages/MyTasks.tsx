@@ -21,7 +21,7 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/lib/taskHelpers";
-import { trpc } from "@/lib/trpc";
+import { useMyTasks, useProjects, useUsers, useUpdateTask } from "@/hooks/useApi";
 import {
   AlertCircle,
   Calendar,
@@ -39,21 +39,11 @@ export default function MyTasks() {
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("created");
   const [editTask, setEditTask] = useState<any>(null);
-  const utils = trpc.useUtils();
+  const { data: myTasks, isLoading } = useMyTasks();
+  const { data: projects } = useProjects();
+  const { data: users } = useUsers();
 
-  const { data: myTasks, isLoading } = trpc.users.myTasks.useQuery();
-  const { data: projects } = trpc.projects.list.useQuery();
-  const { data: users } = trpc.users.list.useQuery();
-
-  const updateTask = trpc.tasks.update.useMutation({
-    onSuccess: () => {
-      toast.success("To-Do updated");
-      utils.users.myTasks.invalidate();
-      utils.tasks.listAll.invalidate();
-      utils.dashboard.stats.invalidate();
-    },
-    onError: (e) => toast.error(e.message),
-  });
+  const updateTask = useUpdateTask();
 
   const projectMap = new Map(projects?.map((p) => [p.id, p.name]) ?? []);
   const userMap = new Map(users?.map((u) => [u.id, u.name]) ?? []);
@@ -182,7 +172,13 @@ export default function MyTasks() {
                         in_progress: "done",
                         done: "todo",
                       };
-                      updateTask.mutate({ id: task.id, status: nextStatus[task.status as TaskStatus] });
+                      updateTask.mutate(
+                        { id: task.id, status: nextStatus[task.status as TaskStatus] },
+                        {
+                          onSuccess: () => toast.success("To-Do updated"),
+                          onError: (e: any) => toast.error(e.message),
+                        }
+                      );
                     }}
                     className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
                       task.status === "done"

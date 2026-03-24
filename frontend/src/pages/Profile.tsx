@@ -13,7 +13,7 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/lib/taskHelpers";
-import { trpc } from "@/lib/trpc";
+import { useMyTasks, useProjects, useUsers, useUpdateMe } from "@/hooks/useApi";
 import {
   AlertCircle,
   Calendar,
@@ -37,14 +37,11 @@ export default function Profile() {
   const [, setLocation] = useLocation();
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState("");
-  const updateMe = trpc.users.updateMe.useMutation({
-    onSuccess: () => { toast.success("Name updated"); setEditingName(false); },
-    onError: (e: any) => toast.error(e.message),
-  });
+  const updateMe = useUpdateMe();
 
-  const { data: myTasks, isLoading: tasksLoading } = trpc.users.myTasks.useQuery();
-  const { data: projects, isLoading: projectsLoading } = trpc.projects.list.useQuery();
-  const { data: allUsers } = trpc.users.list.useQuery();
+  const { data: myTasks, isLoading: tasksLoading } = useMyTasks();
+  const { data: projects, isLoading: projectsLoading } = useProjects();
+  const { data: allUsers } = useUsers();
 
   const userMap = new Map(allUsers?.map((u) => [u.id, u.name]) ?? []);
   const projectMap = new Map(projects?.map((p) => [p.id, p.name]) ?? []);
@@ -82,7 +79,7 @@ export default function Profile() {
                 {editingName ? (
                   <form
                     className="flex items-center gap-2"
-                    onSubmit={(e) => { e.preventDefault(); if (nameValue.trim()) updateMe.mutate(nameValue.trim()); }}
+                    onSubmit={(e) => { e.preventDefault(); if (nameValue.trim()) updateMe.mutate(nameValue.trim(), { onSuccess: () => { toast.success("Name updated"); setEditingName(false); }, onError: (e: any) => toast.error(e.message) }); }}
                   >
                     <input
                       autoFocus

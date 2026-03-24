@@ -10,7 +10,13 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { trpc } from "@/lib/trpc";
+import {
+  useStrategicOrganizer,
+  useStrategicOrganizerVersions,
+  useUpsertStrategicOrganizer,
+  useRestoreStrategicOrganizerVersion,
+  useDeleteStrategicOrganizerVersion,
+} from "@/hooks/useApi";
 import {
   Calendar,
   Clock,
@@ -332,9 +338,9 @@ function BulletCard({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function StrategicOrganizer() {
-  const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.strategicOrganizer.get.useQuery();
-  const { data: versions } = trpc.strategicOrganizer.listVersions.useQuery();
+  const { data, isLoading } = useStrategicOrganizer();
+  const { data: _versions } = useStrategicOrganizerVersions();
+  const versions = _versions as any[] | undefined;
 
   // Simple text fields
   const [schoolName, setSchoolName] = useState("");
@@ -361,43 +367,23 @@ export default function StrategicOrganizer() {
   // Populate from server data
   useEffect(() => {
     if (!data) return;
-    setSchoolName(data.schoolName ?? "");
-    setMission(data.mission ?? "");
-    setIdealCustomerProfile(data.idealCustomerProfile ?? "");
-    setBhag(data.bhag ?? "");
-    setFocusOfTheYear(data.focusOfTheYear ?? "");
-    setValues(parseBulletList(data.values));
-    setParkingLot(parseBulletList(data.parkingLot));
-    setThreeYearVisual(parseGoalCard(data.threeYearVisual));
-    setOneYearGoal(parseGoalCard(data.oneYearGoal));
-    setNinetyDayProject(parseGoalCard(data.ninetyDayProject));
+    const d = data as any;
+    setSchoolName(d.schoolName ?? "");
+    setMission(d.mission ?? "");
+    setIdealCustomerProfile(d.idealCustomerProfile ?? "");
+    setBhag(d.bhag ?? "");
+    setFocusOfTheYear(d.focusOfTheYear ?? "");
+    setValues(parseBulletList(d.values));
+    setParkingLot(parseBulletList(d.parkingLot));
+    setThreeYearVisual(parseGoalCard(d.threeYearVisual));
+    setOneYearGoal(parseGoalCard(d.oneYearGoal));
+    setNinetyDayProject(parseGoalCard(d.ninetyDayProject));
     setDirty(false);
   }, [data]);
 
-  const upsert = trpc.strategicOrganizer.upsert.useMutation({
-    onSuccess: () => {
-      toast.success("Strategic Organizer saved");
-      utils.strategicOrganizer.get.invalidate();
-      utils.strategicOrganizer.listVersions.invalidate();
-      setDirty(false);
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const restoreVersion = trpc.strategicOrganizer.restoreVersion.useMutation({
-    onSuccess: () => {
-      utils.strategicOrganizer.get.invalidate();
-      utils.strategicOrganizer.listVersions.invalidate();
-      setHistoryOpen(false);
-      toast.success("Version restored — your organizer has been updated");
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const deleteVersion = trpc.strategicOrganizer.deleteVersion.useMutation({
-    onSuccess: () => utils.strategicOrganizer.listVersions.invalidate(),
-    onError: (e) => toast.error(e.message),
-  });
+  const upsert = useUpsertStrategicOrganizer();
+  const restoreVersion = useRestoreStrategicOrganizerVersion();
+  const deleteVersion = useDeleteStrategicOrganizerVersion();
 
   const buildPayload = () => ({
     schoolName,
@@ -422,7 +408,13 @@ export default function StrategicOrganizer() {
     saveVersion: true,
   });
 
-  const handleSave = () => upsert.mutate(buildPayload());
+  const handleSave = () => upsert.mutate(buildPayload(), {
+    onSuccess: () => {
+      toast.success("Strategic Organizer saved");
+      setDirty(false);
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   const handleDownloadPdf = async () => {
     setPdfLoading(true);
@@ -824,13 +816,21 @@ export default function StrategicOrganizer() {
                             variant="outline"
                             className="h-7 px-2 gap-1 text-xs"
                             disabled={restoreVersion.isPending}
-                            onClick={() => restoreVersion.mutate(v.id)}
+                            onClick={() => restoreVersion.mutate(v.id, {
+                              onSuccess: () => {
+                                setHistoryOpen(false);
+                                toast.success("Version restored — your organizer has been updated");
+                              },
+                              onError: (e: any) => toast.error(e.message),
+                            })}
                           >
                             <RotateCcw className="h-3 w-3" />
                             Restore
                           </Button>
                           <button
-                            onClick={() => deleteVersion.mutate(v.id)}
+                            onClick={() => deleteVersion.mutate(v.id, {
+                              onError: (e: any) => toast.error(e.message),
+                            })}
                             className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-destructive transition-colors"
                           >
                             <Trash2 className="h-3.5 w-3.5" />

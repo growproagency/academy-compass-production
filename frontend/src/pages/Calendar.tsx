@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { trpc } from "@/lib/trpc";
+import { useCalendarTasks, useCalendarMilestones, useProjectsWithStats } from "@/hooks/useApi";
 import {
   addDays,
   addMonths,
@@ -821,11 +821,10 @@ export default function Calendar() {
   const [filterProject, setFilterProject] = useState<string>("all");
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
 
-  const { data: rawTasks = [], isLoading: tasksLoading } = trpc.tasks.listForCalendar.useQuery();
-  const { data: rawMilestones = [], isLoading: milestonesLoading } =
-    trpc.milestones.listForCalendar.useQuery();
+  const { data: rawTasks = [], isLoading: tasksLoading } = useCalendarTasks();
+  const { data: rawMilestones = [], isLoading: milestonesLoading } = useCalendarMilestones();
   // Use the already-prefetched listWithStats data for the Project filter dropdown
-  const { data: projects = [] } = trpc.projects.listWithStats.useQuery();
+  const { data: projects = [] } = useProjectsWithStats();
 
   const isLoading = tasksLoading || milestonesLoading;
 

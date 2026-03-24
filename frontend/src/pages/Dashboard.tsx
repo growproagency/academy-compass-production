@@ -32,7 +32,16 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/lib/taskHelpers";
-import { trpc } from "@/lib/trpc";
+import {
+  useTasks,
+  useProjectsWithStats,
+  useHealthTrend,
+  useUsers,
+  useUpdateTask,
+  useReorderTask,
+  useBulkDeleteTasks,
+  useAnnouncements,
+} from "@/hooks/useApi";
 import {
   AlertCircle,
   Calendar,
@@ -142,41 +151,20 @@ export default function Dashboard() {
   const [bulkPending, setBulkPending] = useState(false);
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
 
-  const utils = trpc.useUtils();
-  const { data: _allTasks, isLoading: tasksLoading } = trpc.tasks.listAll.useQuery();
-  const { data: _projectsWithStats, isLoading: projectsLoading } = trpc.projects.listWithStats.useQuery();
-  const { data: _healthTrend } = trpc.projects.healthTrend.useQuery();
-  const { data: _users } = trpc.users.list.useQuery();
+  const { data: _allTasks, isLoading: tasksLoading } = useTasks();
+  const { data: _projectsWithStats, isLoading: projectsLoading } = useProjectsWithStats();
+  const { data: _healthTrend } = useHealthTrend();
+  const { data: _users } = useUsers();
 
-  // Cast from unknown (trpc shim types) to typed arrays
+  // Cast from unknown to typed arrays
   const allTasks = _allTasks as any[] | undefined;
   const projectsWithStats = _projectsWithStats as any[] | undefined;
   const healthTrend = _healthTrend as any[] | undefined;
   const users = _users as any[] | undefined;
 
-  const updateTask = trpc.tasks.update.useMutation({
-    onSuccess: () => {
-      utils.tasks.listAll.invalidate();
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const reorderTask = trpc.tasks.reorder.useMutation({
-    onSuccess: () => utils.tasks.listAll.invalidate(),
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const bulkDeleteMutation = trpc.tasks.bulkDelete.useMutation({
-    onSuccess: (res: any) => {
-      utils.tasks.listAll.invalidate();
-      const msg = res.forbidden > 0
-        ? `Archived ${res.deleted} To-Do${res.deleted !== 1 ? "s" : ""} (${res.forbidden} skipped — no permission).`
-        : `Archived ${res.deleted} To-Do${res.deleted !== 1 ? "s" : ""}.`;
-      toast.success(msg);
-      clearSelection();
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
+  const updateTask = useUpdateTask();
+  const reorderTask = useReorderTask();
+  const bulkDeleteMutation = useBulkDeleteTasks();
 
   // Build lookup maps — reuse projectsWithStats (already prefetched) instead of a separate projects.list fetch
   const projectMap = new Map((projectsWithStats ?? []).map((p: any) => [p.id, p.name]));
@@ -230,7 +218,7 @@ export default function Dashboard() {
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     if (task.status !== status) {
-      updateTask.mutate({ id: dragTaskId, status });
+      updateTask.mutate({ id: dragTaskId, status }, { onError: (err: any) => toast.error(err.message) });
     }
 
     if (insertBeforeTaskId !== undefined) {
@@ -242,7 +230,7 @@ export default function Dashboard() {
         newOrder.splice(insertIdx, 0, { id: dragTaskId, sortOrder: -1 });
         newOrder.forEach((item, i) => { item.sortOrder = i * 10; });
         for (const item of newOrder) {
-          reorderTask.mutate({ id: item.id, sortOrder: item.sortOrder });
+          reorderTask.mutate({ id: item.id, sortOrder: item.sortOrder }, { onError: (err: any) => toast.error(err.message) });
         }
       }
     }
@@ -1091,7 +1079,16 @@ export default function Dashboard() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
                 setBulkDeleteConfirmOpen(false);
-                bulkDeleteMutation.mutate(Array.from(selectedIds));
+                bulkDeleteMutation.mutate(Array.from(selectedIds), {
+                  onSuccess: (res: any) => {
+                    const msg = res.forbidden > 0
+                      ? `Archived ${res.deleted} To-Do${res.deleted !== 1 ? "s" : ""} (${res.forbidden} skipped — no permission).`
+                      : `Archived ${res.deleted} To-Do${res.deleted !== 1 ? "s" : ""}.`;
+                    toast.success(msg);
+                    clearSelection();
+                  },
+                  onError: (err: any) => toast.error(err.message),
+                });
               }}
             >
               <Trash2 className="h-4 w-4 mr-1.5" />
@@ -1116,7 +1113,7 @@ export default function Dashboard() {
 // ─── Announcement Banner ──────────────────────────────────────────────────────
 function AnnouncementBanner() {
   const [, setLocation] = useLocation();
-  const { data: announcements } = trpc.announcements.list.useQuery();
+  const { data: announcements } = useAnnouncements();
   const [dismissed, setDismissed] = useState<Set<number>>(() => {
     try {
       const saved = sessionStorage.getItem("dismissed-announcements");

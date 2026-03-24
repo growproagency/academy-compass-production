@@ -42,7 +42,16 @@ import {
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useOrg } from "@/contexts/OrgContext";
-import { trpc } from "@/lib/trpc";
+import {
+  useProjectsWithStats,
+  useTasks,
+  useCalendarTasks,
+  useCalendarMilestones,
+  useHealthTrend,
+  useUsers,
+  useAnnouncements,
+  useMyTasks,
+} from "@/hooks/useApi";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
@@ -203,17 +212,17 @@ function DashboardLayoutContent({
   }, [isResizing, setSidebarWidth]);
 
   // Prefetch data for tabs so it's already cached when the user navigates to them
-  trpc.projects.listWithStats.useQuery();
-  trpc.tasks.listAll.useQuery();
-  trpc.tasks.listForCalendar.useQuery();
-  trpc.milestones.listForCalendar.useQuery();
-  trpc.projects.healthTrend.useQuery();
-  trpc.users.list.useQuery();
-  trpc.announcements.list.useQuery();
+  useProjectsWithStats();
+  useTasks();
+  useCalendarTasks();
+  useCalendarMilestones();
+  useHealthTrend();
+  useUsers();
+  useAnnouncements();
 
   // Overdue count badge for My Tasks — derived from the myTasks cache so it
   // updates immediately when a task is toggled (optimistic update).
-  const { data: myTasks } = trpc.users.myTasks.useQuery();
+  const { data: myTasks } = useMyTasks();
   const now = Date.now();
   const overdueCount = (myTasks ?? []).filter(
     (t: any) => t.dueDate && t.dueDate < now && t.status !== "done"
