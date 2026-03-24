@@ -274,7 +274,7 @@ function DashboardLayoutContent({
                   <div className="w-7 h-7 rounded-lg overflow-hidden border border-primary/20 flex items-center justify-center shrink-0 bg-primary/5">
                     <img src={LOGO_URL} alt="Academy Compass" className="w-full h-full object-contain" />
                   </div>
-                  <span className="font-extrabold tracking-tight text-sm gradient-text truncate flex-1">
+                  <span className="font-extrabold tracking-tight text-sm text-primary truncate flex-1">
                     Academy Compass
                   </span>
                   <button

@@ -39,9 +39,9 @@ import {
   useWeeklyReportSchedule,
   usePreviewDigest,
   useUpdateUserRole,
-  useInvites,
-  useCreateInvite,
-  useDeleteInvite,
+  useInviteLinks,
+  useCreateInviteLink,
+  useDeleteInviteLink,
   QK,
 } from "@/hooks/useApi";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -55,7 +55,8 @@ import {
   Eye,
   FolderKanban,
   Loader2,
-  Mail,
+  Copy,
+  Link,
   Save,
   Shield,
   ShieldOff,
@@ -174,12 +175,31 @@ export default function AdminPanel() {
 
   const updateRole = useUpdateUserRole();
 
-  // ── Invites ────────────────────────────────────────────────────────────────
-  const [inviteEmail, setInviteEmail] = useState("");
+  // ── Invite Links ───────────────────────────────────────────────────────────
   const [inviteRole, setInviteRole] = useState<"user" | "admin">("user");
-  const { data: pendingInvites } = useInvites();
-  const createInvite = useCreateInvite();
-  const deleteInvite = useDeleteInvite();
+  const [generatedLink, setGeneratedLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const { data: inviteLinks } = useInviteLinks();
+  const createInviteLink = useCreateInviteLink();
+  const deleteInviteLink = useDeleteInviteLink();
+
+  const handleGenerateLink = () => {
+    createInviteLink.mutate({ role: inviteRole }, {
+      onSuccess: (data: any) => {
+        const url = `${window.location.origin}/invite/${data.token}`;
+        setGeneratedLink(url);
+        toast.success("Invite link generated");
+      },
+      onError: (e: any) => toast.error(e.message),
+    });
+  };
+
+  const handleCopy = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    toast.success("Link copied to clipboard");
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   // Redirect non-admins
   if (user && user.role !== "admin" && user.role !== "superadmin") {
@@ -252,28 +272,14 @@ export default function AdminPanel() {
             Invite Users
           </CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            Send an invite link by email. Users can only join via invite.
+            Generate a signup link and share it directly. No email required.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Invite form */}
+          {/* Link generator */}
           <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              className="flex-1 border rounded-lg px-3 py-2 text-sm bg-background"
-              placeholder="Email address"
-              type="email"
-              value={inviteEmail}
-              onChange={e => setInviteEmail(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && inviteEmail && createInvite.mutate(
-                { email: inviteEmail, role: inviteRole },
-                {
-                  onSuccess: () => { toast.success(`Invite sent to ${inviteEmail}`); setInviteEmail(""); setInviteRole("user"); },
-                  onError: (e: any) => toast.error(e.message),
-                }
-              )}
-            />
             <Select value={inviteRole} onValueChange={v => setInviteRole(v as "user" | "admin")}>
-              <SelectTrigger className="w-32 h-9 text-sm bg-secondary border-border">
+              <SelectTrigger className="w-36 h-9 text-sm bg-secondary border-border">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -284,46 +290,71 @@ export default function AdminPanel() {
             <Button
               size="sm"
               className="gap-1.5 h-9"
-              disabled={!inviteEmail || createInvite.isPending}
-              onClick={() => createInvite.mutate(
-                { email: inviteEmail, role: inviteRole },
-                {
-                  onSuccess: () => { toast.success(`Invite sent to ${inviteEmail}`); setInviteEmail(""); setInviteRole("user"); },
-                  onError: (e: any) => toast.error(e.message),
-                }
-              )}
+              disabled={createInviteLink.isPending}
+              onClick={handleGenerateLink}
             >
-              {createInvite.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
-              Send Invite
+              {createInviteLink.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link className="h-3.5 w-3.5" />}
+              Generate Link
             </Button>
           </div>
 
-          {/* Pending invites */}
-          {pendingInvites && pendingInvites.length > 0 && (
+          {/* Generated link display */}
+          {generatedLink && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20">
+              <span className="text-xs text-muted-foreground truncate flex-1 font-mono">{generatedLink}</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 gap-1.5 shrink-0 text-primary hover:text-primary"
+                onClick={() => handleCopy(generatedLink)}
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {copied ? "Copied!" : "Copy"}
+              </Button>
+            </div>
+          )}
+
+          {/* Active invite links */}
+          {inviteLinks && (inviteLinks as any[]).length > 0 && (
             <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pending Invites</p>
-              {(pendingInvites as any[]).map((inv: any) => (
-                <div key={inv.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-secondary/40 text-sm">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span className="truncate">{inv.email}</span>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
-                      {inv.role === "admin" ? "Admin" : "Member"}
-                    </Badge>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Active Links</p>
+              {(inviteLinks as any[]).map((link: any) => {
+                const url = `${window.location.origin}/invite/${link.token}`;
+                return (
+                  <div key={link.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-secondary/40 text-sm">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Link className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="truncate font-mono text-xs text-muted-foreground">{link.token}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+                        {link.role === "admin" ? "Admin" : "Member"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-primary"
+                        onClick={() => handleCopy(url)}
+                        title="Copy link"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteInviteLink.mutate(link.id, {
+                          onSuccess: () => toast.success("Link revoked"),
+                          onError: (e: any) => toast.error(e.message),
+                        })}
+                        title="Revoke link"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive shrink-0"
-                    onClick={() => deleteInvite.mutate(inv.id, {
-                      onSuccess: () => toast.success("Invite revoked"),
-                      onError: (e: any) => toast.error(e.message),
-                    })}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

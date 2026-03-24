@@ -21,6 +21,7 @@ import Announcements from "./pages/Announcements";
 import MemberScorecard from "./pages/MemberScorecard";
 import AuthCallback from "./pages/AuthCallback";
 import SetPassword from "./pages/SetPassword";
+import InviteSignup from "./pages/InviteSignup";
 import { CommandPalette } from "./components/CommandPalette";
 
 
@@ -29,6 +30,7 @@ function Router() {
     <Switch>
       <Route path="/auth/callback" component={AuthCallback} />
       <Route path="/set-password" component={SetPassword} />
+      <Route path="/invite/:token" component={InviteSignup} />
       <Route path="/strategic-organizer/preview" component={StrategicOrganizerPreview} />
       <Route>
         <DashboardLayout>

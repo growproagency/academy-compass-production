@@ -1183,3 +1183,41 @@ export async function markInviteAccepted(email: string, orgId: number): Promise<
 export async function deleteInvite(id: number): Promise<void> {
   await supabase.from("invites").delete().eq("id", id);
 }
+
+// ── Invite Links ──────────────────────────────────────────────────────────────
+export async function createInviteLink(data: { organizationId: number; role: "user" | "admin"; invitedBy: number; expiresAt?: number | null }): Promise<any> {
+  const { data: row, error } = await supabase
+    .from("invite_links")
+    .insert({ organizationId: data.organizationId, role: data.role, invitedBy: data.invitedBy, expiresAt: data.expiresAt ?? null, createdAt: Date.now() })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return row;
+}
+
+export async function getInviteLink(token: string): Promise<any | null> {
+  const { data } = await supabase
+    .from("invite_links")
+    .select("*, organizations(name, slug)")
+    .eq("token", token)
+    .single();
+  return data ?? null;
+}
+
+export async function markInviteLinkUsed(token: string, email: string): Promise<void> {
+  await supabase.from("invite_links").update({ usedAt: Date.now(), usedByEmail: email }).eq("token", token);
+}
+
+export async function listInviteLinks(orgId: number): Promise<any[]> {
+  const { data } = await supabase
+    .from("invite_links")
+    .select("*")
+    .eq("organizationId", orgId)
+    .is("usedAt", null)
+    .order("createdAt", { ascending: false });
+  return data ?? [];
+}
+
+export async function deleteInviteLink(id: number): Promise<void> {
+  await supabase.from("invite_links").delete().eq("id", id);
+}

@@ -244,6 +244,17 @@ export const api = {
     list: () => get("/invites"),
     create: (email: string, role: "user" | "admin") => post("/invites", { email, role }),
     delete: (id: number) => del(`/invites/${id}`),
+    // Invite links (no email required)
+    links: {
+      list: () => get("/invites/links"),
+      create: (role: "user" | "admin", expiresInDays?: number) =>
+        post("/invites/links", { role, expiresInDays }),
+      delete: (id: number) => del(`/invites/links/${id}`),
+    },
+    // Public — no auth header needed
+    validateToken: (token: string) => get(`/invites/join/${token}`),
+    signup: (token: string, data: { name: string; email: string; password: string }) =>
+      post(`/invites/join/${token}`, data),
   },
 };
 

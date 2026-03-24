@@ -46,6 +46,7 @@ export const QK = {
   previewDigest: ["notifications", "previewDigest"] as const,
   myTasks: ["users", "me", "tasks"] as const,
   invites: ["invites"] as const,
+  inviteLinks: ["invites", "links"] as const,
 };
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -743,5 +744,26 @@ export function useDeleteInvite() {
   return useMutation({
     mutationFn: (id: number) => api.invites.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.invites }),
+  });
+}
+
+export function useInviteLinks() {
+  return useQuery({ queryKey: QK.inviteLinks, queryFn: () => api.invites.links.list() });
+}
+
+export function useCreateInviteLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ role, expiresInDays }: { role: "user" | "admin"; expiresInDays?: number }) =>
+      api.invites.links.create(role, expiresInDays),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.inviteLinks }),
+  });
+}
+
+export function useDeleteInviteLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.invites.links.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.inviteLinks }),
   });
 }
