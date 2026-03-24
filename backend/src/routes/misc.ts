@@ -177,8 +177,12 @@ announcementsRouter.post("/", requireAuth, requireAdmin, requireOrg, async (req,
 });
 
 announcementsRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
-  await updateAnnouncement(Number(req.params.id), req.body);
-  res.json({ success: true });
+  try {
+    await updateAnnouncement(Number(req.params.id), req.body);
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ message: e.message ?? "Failed to update announcement" });
+  }
 });
 
 announcementsRouter.patch("/:id/pin", requireAuth, requireAdmin, async (req, res) => {

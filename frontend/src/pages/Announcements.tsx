@@ -272,6 +272,7 @@ export default function Announcements() {
           </DialogHeader>
           {editTarget && (
             <AnnouncementForm
+              key={editTarget.id}
               initial={editTarget}
               onSave={(data) => updateMutation.mutate({ id: editTarget.id, ...data })}
               onCancel={() => setEditTarget(null)}
@@ -352,10 +353,8 @@ function AnnouncementCard({
           </div>
           {isAdmin && (
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
+              <DropdownMenuTrigger className="h-7 w-7 shrink-0 inline-flex items-center justify-center rounded-md hover:bg-accent text-muted-foreground outline-none">
+                <MoreVertical className="h-4 w-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={onTogglePin} className="gap-2">

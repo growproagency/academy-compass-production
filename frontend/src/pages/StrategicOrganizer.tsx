@@ -244,7 +244,7 @@ function GoalCardEditor({
 
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground font-medium">
-            Key Achievements / Milestones
+            Goals
           </Label>
           <BulletListEditor
             bullets={value.bullets}
@@ -455,7 +455,7 @@ export default function StrategicOrganizer() {
           </div>` : ""}
           ${hasBullets ? `
           <div class="bullet-section">
-            <div class="bullet-label">Key Milestones</div>
+            <div class="bullet-label">Goals</div>
             <ul class="bullet-list">${bulletHtml(card.bullets)}</ul>
           </div>` : ""}
         </div>`;
@@ -495,13 +495,12 @@ export default function StrategicOrganizer() {
       font-family: 'Inter', system-ui, sans-serif;
       background: #f8f7f4;
       color: #1c1c1e;
-      min-height: 100vh;
       padding: 48px 40px;
     }
     /* ── Header ── */
     .header {
-      margin-bottom: 40px;
-      padding-bottom: 28px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
       border-bottom: 2px solid #e5e2db;
     }
     .header-top {
@@ -574,6 +573,8 @@ export default function StrategicOrganizer() {
       font-size: 13.5px;
       color: #333;
       line-height: 1.7;
+      word-break: break-word;
+      overflow-wrap: break-word;
     }
     /* ── Metrics ── */
     .metrics {
@@ -653,13 +654,13 @@ export default function StrategicOrganizer() {
   <div class="grid">
     ${mission ? simpleSectionHtml("Mission", mission, "🎯", "#3b82f6") : ""}
     ${bhag ? simpleSectionHtml("BHAG", bhag, "🚀", "#8b5cf6") : ""}
-    ${idealCustomerProfile ? `<div class="full">${simpleSectionHtml("Ideal Customer Profile", idealCustomerProfile, "👤", "#f59e0b")}</div>` : ""}
-    ${focusOfTheYear ? simpleSectionHtml("Focus of the Year", focusOfTheYear, "⭐", "#ec4899") : ""}
+    ${idealCustomerProfile ? simpleSectionHtml("Ideal Customer Profile", idealCustomerProfile, "👤", "#f59e0b") : ""}
     ${bulletSectionHtml("Core Values", values, "💎", "#10b981")}
     <div class="full">${goalCardHtml(threeYearVisual, "3-Year Vision", "#6366f1", "🏔️")}</div>
     ${goalCardHtml(oneYearGoal, "1-Year Goal", "#0ea5e9", "📅")}
     ${goalCardHtml(ninetyDayProject, "90-Day Project", "#f97316", "⚡")}
     ${bulletSectionHtml("Parking Lot", parkingLot, "🅿️", "#94a3b8")}
+    ${simpleSectionHtml("Focus of the Year", focusOfTheYear || "—", "⭐", "#ec4899")}
   </div>
 </body>
 </html>`;
@@ -703,15 +704,16 @@ export default function StrategicOrganizer() {
       const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: "a4" });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
-      const imgW = pageW;
-      const imgH = (canvas.height * pageW) / canvas.width;
 
-      let y = 0;
-      while (y < imgH) {
-        if (y > 0) pdf.addPage();
-        pdf.addImage(imgData, "JPEG", 0, -y, imgW, imgH);
-        y += pageH;
-      }
+      // Scale to fit entire content on one page
+      const scaleToFitW = pageW / canvas.width;
+      const scaleToFitH = pageH / canvas.height;
+      const scale = Math.min(scaleToFitW, scaleToFitH);
+      const imgW = canvas.width * scale;
+      const imgH = canvas.height * scale;
+      const offsetX = (pageW - imgW) / 2;
+
+      pdf.addImage(imgData, "JPEG", offsetX, 0, imgW, imgH);
 
       const filename = `${schoolName.trim().replace(/\s+/g, "-").toLowerCase() || "strategic-organizer"}.pdf`;
       pdf.save(filename);

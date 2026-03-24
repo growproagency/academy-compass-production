@@ -8,7 +8,7 @@
  * This lets us keep the frontend pages exactly as they were.
  */
 
-import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
   QK,
@@ -25,6 +25,7 @@ import {
   useProject,
   useProjectMembers,
   useCreateProject,
+  useUpdateProject,
   useDeleteProject,
   useAddProjectMember,
   useRemoveProjectMember,
@@ -63,6 +64,7 @@ import {
   useAnnouncements,
   useCreateAnnouncement,
   useUpdateAnnouncement,
+  useTogglePinAnnouncement,
   useDeleteAnnouncement,
   useProjectComments,
   useCreateProjectComment,
@@ -230,31 +232,7 @@ export const trpc = {
     healthTrend: { useQuery: () => useHealthTrend() },
     getById: { useQuery: ({ id }: { id: number }) => useProject(id) },
     create: { useMutation: (opts?: object) => withOpts(useCreateProject(), opts) },
-    // projects.update uses a real useMutation so onMutate (optimistic updates) works
-    update: {
-      // eslint-disable-next-line react-hooks/rules-of-hooks
-      useMutation: (opts?: object) => {
-        // eslint-disable-next-line react-hooks/rules-of-hooks
-        const qc = useQueryClient();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const o = opts as any;
-        // eslint-disable-next-line react-hooks/rules-of-hooks
-        return useMutation({
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          mutationFn: ({ id, ...data }: any) => api.projects.update(id, data),
-          onMutate: o?.onMutate,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onSuccess: (_d: unknown, v: any, ctx: unknown) => {
-            qc.invalidateQueries({ queryKey: QK.project(v.id) });
-            qc.invalidateQueries({ queryKey: QK.projects });
-            qc.invalidateQueries({ queryKey: QK.projectsWithStats });
-            o?.onSuccess?.(_d, v, ctx);
-          },
-          onError: (e: unknown, v: unknown, ctx: unknown) => { o?.onError?.(e, v, ctx); },
-          onSettled: (d: unknown, e: unknown, v: unknown, ctx: unknown) => { o?.onSettled?.(d, e, v, ctx); },
-        });
-      },
-    },
+    update: { useMutation: (opts?: object) => withOpts(useUpdateProject(), opts) },
     delete: { useMutation: (opts?: object) => withOpts(useDeleteProject(), opts) },
     members: {
       list: { useQuery: ({ projectId }: { projectId: number }) => useProjectMembers(projectId) },
@@ -324,7 +302,7 @@ export const trpc = {
     create: { useMutation: (opts?: object) => withOpts(useCreateAnnouncement(), opts) },
     update: { useMutation: (opts?: object) => withOpts(useUpdateAnnouncement(), opts) },
     delete: { useMutation: (opts?: object) => withOpts(useDeleteAnnouncement(), opts) },
-    togglePin: { useMutation: (opts?: object) => withOpts(useUpdateAnnouncement(), opts) },
+    togglePin: { useMutation: (opts?: object) => withOpts(useTogglePinAnnouncement(), opts) },
   },
 
   projectComments: {

@@ -895,7 +895,7 @@ async function _enrichProjectsWithStats(projectList: Project[]) {
     entry.total++;
     if (m.completedAt) entry.done++;
     if (!m.completedAt && m.dueDate && m.dueDate < now) entry.overdue++;
-    if (entry.preview.length < 3) entry.preview.push({ id: m.id, title: m.title, completedAt: m.completedAt, dueDate: m.dueDate });
+    entry.preview.push({ id: m.id, title: m.title, completedAt: m.completedAt, dueDate: m.dueDate });
   }
   return projectList.map((p) => {
     const tc = taskCounts[p.id] ?? { total: 0, done: 0 };
@@ -1078,7 +1078,8 @@ export async function createAnnouncement(data: { organizationId: number; title: 
 }
 
 export async function updateAnnouncement(id: number, data: { title?: string; body?: string; isPinned?: boolean; expiresAt?: number | null }): Promise<void> {
-  await supabase.from("announcements").update({ ...data, updatedAt: new Date().toISOString() }).eq("id", id);
+  const { error } = await supabase.from("announcements").update({ ...data, updatedAt: new Date().toISOString() }).eq("id", id);
+  if (error) throw new Error(error.message);
 }
 
 export async function deleteAnnouncement(id: number): Promise<void> {

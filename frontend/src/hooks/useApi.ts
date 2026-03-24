@@ -79,8 +79,17 @@ export function useUpdateMe() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (name: string) => api.users.updateMe(name),
-    onSuccess: (updated: any) => {
-      qc.setQueryData(QK.me, updated);
+    onMutate: async (name) => {
+      await qc.cancelQueries({ queryKey: QK.me });
+      const previous = qc.getQueryData(QK.me);
+      qc.setQueryData(QK.me, (old: any) => old ? { ...old, name } : old);
+      return { previous };
+    },
+    onError: (_e, _v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.me, ctx.previous);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: QK.me });
       qc.invalidateQueries({ queryKey: QK.users });
     },
   });
@@ -91,7 +100,18 @@ export function useUpdateUserRole() {
   return useMutation({
     mutationFn: ({ id, role }: { id: number; role: "user" | "admin" }) =>
       api.users.updateRole(id, role),
-    onSuccess: () => qc.invalidateQueries({ queryKey: QK.users }),
+    onMutate: async ({ id, role }) => {
+      await qc.cancelQueries({ queryKey: QK.users });
+      const previous = qc.getQueryData(QK.users);
+      qc.setQueryData(QK.users, (old: any[]) =>
+        (old ?? []).map((u) => u.id === id ? { ...u, role } : u)
+      );
+      return { previous };
+    },
+    onError: (_e, _v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.users, ctx.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: QK.users }),
   });
 }
 
@@ -142,8 +162,13 @@ export function useUpdateProject() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: number; [k: string]: unknown }) => api.projects.update(id, data),
-    onSuccess: (_d, v) => {
-      // Immediately update both list caches with the changed fields
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: QK.projects });
+      await qc.cancelQueries({ queryKey: QK.projectsWithStats });
+      await qc.cancelQueries({ queryKey: QK.project(v.id) });
+      const prevProjects = qc.getQueryData(QK.projects);
+      const prevStats = qc.getQueryData(QK.projectsWithStats);
+      const prevProject = qc.getQueryData(QK.project(v.id));
       const patch = (old: unknown) =>
         Array.isArray(old)
           ? old.map((p: Record<string, unknown>) => (p.id === v.id ? { ...p, ...v } : p))
@@ -153,7 +178,14 @@ export function useUpdateProject() {
       qc.setQueryData(QK.project(v.id), (old: unknown) =>
         old && typeof old === "object" ? { ...(old as object), ...v } : old
       );
-      // Background refetch for eventual consistency
+      return { prevProjects, prevStats, prevProject };
+    },
+    onError: (_e, v, ctx: any) => {
+      if (ctx?.prevProjects) qc.setQueryData(QK.projects, ctx.prevProjects);
+      if (ctx?.prevStats) qc.setQueryData(QK.projectsWithStats, ctx.prevStats);
+      if (ctx?.prevProject) qc.setQueryData(QK.project(v.id), ctx.prevProject);
+    },
+    onSettled: (_d, _e, v) => {
       qc.invalidateQueries({ queryKey: QK.project(v.id) });
       qc.invalidateQueries({ queryKey: QK.projects });
       qc.invalidateQueries({ queryKey: QK.projectsWithStats });
@@ -287,7 +319,18 @@ export function useReorderTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, sortOrder }: { id: number; sortOrder: number }) => api.tasks.reorder(id, sortOrder),
-    onSuccess: () => qc.invalidateQueries({ queryKey: QK.tasks }),
+    onMutate: async ({ id, sortOrder }) => {
+      await qc.cancelQueries({ queryKey: QK.tasks });
+      const previous = qc.getQueryData(QK.tasks);
+      qc.setQueryData(QK.tasks, (old: any[]) =>
+        (old ?? []).map((t) => t.id === id ? { ...t, sortOrder } : t)
+      );
+      return { previous };
+    },
+    onError: (_e, _v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.tasks, ctx.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: QK.tasks }),
   });
 }
 
@@ -295,7 +338,18 @@ export function useArchiveTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.tasks.archive(id),
-    onSuccess: () => {
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: QK.tasks });
+      const previous = qc.getQueryData(QK.tasks);
+      qc.setQueryData(QK.tasks, (old: any[]) =>
+        (old ?? []).filter((t) => t.id !== id)
+      );
+      return { previous };
+    },
+    onError: (_e, _v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.tasks, ctx.previous);
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: QK.tasks });
       qc.invalidateQueries({ queryKey: QK.archivedTasks });
       qc.invalidateQueries({ queryKey: QK.dashboardStats });
@@ -307,7 +361,21 @@ export function useRestoreTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.tasks.restore(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: QK.tasks }); qc.invalidateQueries({ queryKey: QK.archivedTasks }); },
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: QK.archivedTasks });
+      const previous = qc.getQueryData(QK.archivedTasks);
+      qc.setQueryData(QK.archivedTasks, (old: any[]) =>
+        (old ?? []).filter((t) => t.id !== id)
+      );
+      return { previous };
+    },
+    onError: (_e, _v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.archivedTasks, ctx.previous);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: QK.tasks });
+      qc.invalidateQueries({ queryKey: QK.archivedTasks });
+    },
   });
 }
 
@@ -348,7 +416,18 @@ export function useToggleSubtask() {
   return useMutation({
     mutationFn: ({ id, completed, taskId }: { id: number; completed: boolean; taskId: number }) =>
       api.subtasks.toggle(id, completed),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: QK.subtasks(v.taskId) }),
+    onMutate: async ({ id, completed, taskId }) => {
+      await qc.cancelQueries({ queryKey: QK.subtasks(taskId) });
+      const previous = qc.getQueryData(QK.subtasks(taskId));
+      qc.setQueryData(QK.subtasks(taskId), (old: any[]) =>
+        (old ?? []).map((s) => s.id === id ? { ...s, completed } : s)
+      );
+      return { previous };
+    },
+    onError: (_e, v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.subtasks(v.taskId), ctx.previous);
+    },
+    onSettled: (_d, _e, v) => qc.invalidateQueries({ queryKey: QK.subtasks(v.taskId) }),
   });
 }
 
@@ -400,7 +479,35 @@ export function useCreateMilestone() {
   return useMutation({
     mutationFn: ({ projectId, ...data }: { projectId: number; [k: string]: unknown }) =>
       api.milestones.create(projectId, data),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: QK.milestones(v.projectId) }),
+    onMutate: async ({ projectId, ...data }) => {
+      await qc.cancelQueries({ queryKey: QK.milestones(projectId) });
+      await qc.cancelQueries({ queryKey: QK.projectsWithStats });
+      const previous = qc.getQueryData(QK.milestones(projectId));
+      const prevStats = qc.getQueryData(QK.projectsWithStats);
+      const tempId = -Date.now();
+      const optimistic = { id: tempId, projectId, completedAt: null, createdAt: new Date().toISOString(), ...data };
+      qc.setQueryData(QK.milestones(projectId), (old: any) =>
+        Array.isArray(old) ? [...old, optimistic] : [optimistic]
+      );
+      qc.setQueryData(QK.projectsWithStats, (old: any) =>
+        Array.isArray(old) ? old.map((p: any) =>
+          p.id !== projectId ? p : {
+            ...p,
+            milestoneTotal: (p.milestoneTotal ?? 0) + 1,
+            milestonePreview: [...(p.milestonePreview ?? []), { id: tempId, title: data.title, completedAt: null, dueDate: (data.dueDate as number) ?? null }],
+          }
+        ) : old
+      );
+      return { previous, prevStats };
+    },
+    onError: (_e, v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.milestones(v.projectId), ctx.previous);
+      if (ctx?.prevStats) qc.setQueryData(QK.projectsWithStats, ctx.prevStats);
+    },
+    onSettled: (_d, _e, v) => {
+      qc.invalidateQueries({ queryKey: QK.milestones(v.projectId) });
+      qc.invalidateQueries({ queryKey: QK.projectsWithStats });
+    },
   });
 }
 
@@ -409,7 +516,18 @@ export function useUpdateMilestone() {
   return useMutation({
     mutationFn: ({ id, projectId, ...data }: { id: number; projectId: number; [k: string]: unknown }) =>
       api.milestones.update(id, data),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: QK.milestones(v.projectId) }),
+    onMutate: async ({ id, projectId, ...data }) => {
+      await qc.cancelQueries({ queryKey: QK.milestones(projectId) });
+      const previous = qc.getQueryData(QK.milestones(projectId));
+      qc.setQueryData(QK.milestones(projectId), (old: any[]) =>
+        (old ?? []).map((m) => m.id === id ? { ...m, ...data } : m)
+      );
+      return { previous };
+    },
+    onError: (_e, v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.milestones(v.projectId), ctx.previous);
+    },
+    onSettled: (_d, _e, v) => qc.invalidateQueries({ queryKey: QK.milestones(v.projectId) }),
   });
 }
 
@@ -516,7 +634,38 @@ export function useUpdateAnnouncement() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: number; [k: string]: unknown }) => api.announcements.update(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: QK.announcements }),
+    onMutate: async ({ id, ...data }) => {
+      await qc.cancelQueries({ queryKey: QK.announcements });
+      const previous = qc.getQueryData(QK.announcements);
+      qc.setQueryData(QK.announcements, (old: any[]) =>
+        (old ?? []).map((a) => a.id === id ? { ...a, ...data } : a)
+      );
+      return { previous };
+    },
+    onError: (_e, _v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.announcements, ctx.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: QK.announcements }),
+  });
+}
+
+export function useTogglePinAnnouncement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, isPinned }: { id: number; isPinned: boolean }) =>
+      api.announcements.update(id, { isPinned }),
+    onMutate: async ({ id, isPinned }) => {
+      await qc.cancelQueries({ queryKey: QK.announcements });
+      const previous = qc.getQueryData(QK.announcements);
+      qc.setQueryData(QK.announcements, (old: any[]) =>
+        (old ?? []).map((a) => (a.id === id ? { ...a, isPinned } : a))
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(QK.announcements, ctx.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: QK.announcements }),
   });
 }
 

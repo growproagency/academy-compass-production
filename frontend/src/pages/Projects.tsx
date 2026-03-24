@@ -302,7 +302,6 @@ export default function Projects() {
 
   const createMilestoneMutation = trpc.milestones.create.useMutation({
     onSuccess: () => {
-      utils.projects.listWithStats.invalidate();
       setQuickMilestoneProjectId(null);
       setQuickMilestoneTitle("");
       setQuickMilestoneDueDate("");
@@ -576,13 +575,15 @@ export default function Projects() {
                     )}
                   </div>
 
-                  {/* Milestone preview list (first 3, collapsible) with inline editing */}
+                  {/* Milestone preview list (first 3, expandable/scrollable) with inline editing */}
                   {(() => {
-                    const preview = (project as any).milestonePreview as { id: number; title: string; completedAt: number | null; dueDate: number | null }[] | undefined;
-                    if (!preview || preview.length === 0) return null;
+                    const allMilestones = (project as any).milestonePreview as { id: number; title: string; completedAt: number | null; dueDate: number | null }[] | undefined;
+                    if (!allMilestones || allMilestones.length === 0) return null;
                     const isExpanded = expandedMilestones[project.id] ?? false;
+                    const preview = isExpanded ? allMilestones : allMilestones.slice(0, 3);
                     return (
                       <div className="space-y-1 mt-2" onClick={(e) => e.stopPropagation()}>
+                        <div className={isExpanded ? "max-h-40 overflow-y-auto space-y-1 pr-1" : "space-y-1"}>
                         {preview.map((m) => (
                           <div key={m.id} className="group flex items-center gap-2 text-xs">
                             <button
@@ -650,7 +651,8 @@ export default function Projects() {
                             )}
                           </div>
                         ))}
-                        {milestoneTotal > 3 && (
+                        </div>
+                        {allMilestones.length > 3 && (
                           <button
                             className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary mt-0.5 transition-colors"
                             onClick={(e) => {
@@ -659,7 +661,7 @@ export default function Projects() {
                             }}
                           >
                             {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                            {isExpanded ? "Show less" : `+${milestoneTotal - 3} more`}
+                            {isExpanded ? "Show less" : `+${allMilestones.length - 3} more`}
                           </button>
                         )}
                       </div>
