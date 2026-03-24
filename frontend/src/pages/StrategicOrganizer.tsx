@@ -244,7 +244,7 @@ function GoalCardEditor({
 
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground font-medium">
-            Key Achievements / Milestones
+            Goals
           </Label>
           <BulletListEditor
             bullets={value.bullets}
