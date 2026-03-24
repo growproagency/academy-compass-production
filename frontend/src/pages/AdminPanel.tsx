@@ -182,7 +182,7 @@ export default function AdminPanel() {
   const deleteInvite = useDeleteInvite();
 
   // Redirect non-admins
-  if (user && user.role !== "admin") {
+  if (user && user.role !== "admin" && user.role !== "superadmin") {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         <Shield className="h-12 w-12 text-muted-foreground/40" />

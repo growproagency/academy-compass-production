@@ -215,7 +215,7 @@
 
 /* ─── Gradient text ──────────────────────────────────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, oklch(0.52 0.24 270), oklch(0.55 0.20 220));
+  background: linear-gradient(135deg, var(--primary), var(--accent, var(--primary)));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
