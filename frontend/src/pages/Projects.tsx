@@ -207,11 +207,11 @@ function ProjectFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md bg-card border-border">
         <DialogHeader>
-          <DialogTitle>{project ? "Edit Rock" : "New Rock"}</DialogTitle>
+          <DialogTitle>{project ? "Edit Project" : "New Project"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="proj-name">Rock Name *</Label>
+            <Label htmlFor="proj-name">Project Name *</Label>
             <Input
               id="proj-name"
               placeholder="e.g. Summer Belt Testing"
@@ -341,7 +341,7 @@ export default function Projects() {
     const title = quickMilestoneTitle.trim();
     if (!title) return;
     setQuickMilestonePending(true);
-    const dueDateTs = quickMilestoneDueDate ? new Date(quickMilestoneDueDate).getTime() : undefined;
+    const dueDateTs = quickMilestoneDueDate ? new Date(quickMilestoneDueDate + "T00:00:00").getTime() : undefined;
     createMilestoneMutation.mutate({ projectId, title, dueDate: dueDateTs });
   };
 
@@ -366,14 +366,14 @@ export default function Projects() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Rocks</h1>
+          <h1 className="text-2xl font-bold">Projects</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {projects?.length ?? 0} rock{projects?.length !== 1 ? "s" : ""}
+            {projects?.length ?? 0} project{projects?.length !== 1 ? "s" : ""}
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)} className="gap-2">
           <Plus className="h-4 w-4" />
-          New Rock
+          New Project
         </Button>
       </div>
 
@@ -388,9 +388,9 @@ export default function Projects() {
             <FolderKanban className="h-8 w-8 text-muted-foreground" />
           </div>
           <div className="text-center">
-            <p className="font-semibold">No rocks yet</p>
+            <p className="font-semibold">No projects yet</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Create your first rock to get started
+              Create your first project to get started
             </p>
           </div>
           <Button onClick={() => setCreateOpen(true)} className="gap-2">

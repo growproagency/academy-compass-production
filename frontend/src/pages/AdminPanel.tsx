@@ -241,7 +241,7 @@ export default function AdminPanel() {
         {[
           { label: "Total Users", value: stats.users, icon: <Users className="h-5 w-5" />, color: "text-primary" },
           { label: "Admins", value: stats.admins, icon: <Shield className="h-5 w-5" />, color: "text-accent" },
-          { label: "Rocks", value: stats.projects, icon: <FolderKanban className="h-5 w-5" />, color: "text-blue-400" },
+          { label: "Projects", value: stats.projects, icon: <FolderKanban className="h-5 w-5" />, color: "text-blue-400" },
           { label: "Total Tasks", value: stats.tasks, icon: <CheckCircle2 className="h-5 w-5" />, color: "text-green-400" },
         ].map((s) => (
           <Card key={s.label} className="bg-card border-border/60">
@@ -306,7 +306,7 @@ export default function AdminPanel() {
                       </div>
                       <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
                         {u.email && <span className="truncate max-w-48">{u.email}</span>}
-                        <span>{userProjects.length} rocks</span>
+                        <span>{userProjects.length} projects</span>
                         <span>{userTasks.length} tasks</span>
                       </div>
                     </div>
@@ -696,7 +696,7 @@ export default function AdminPanel() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {roleChange?.newRole === "admin"
-                ? `Grant admin privileges to ${roleChange?.name}? They will have full access to all rocks, tasks, and user management.`
+                ? `Grant admin privileges to ${roleChange?.name}? They will have full access to all projects, tasks, and user management.`
                 : `Remove admin privileges from ${roleChange?.name}? They will only have regular user access.`}
             </AlertDialogDescription>
           </AlertDialogHeader>

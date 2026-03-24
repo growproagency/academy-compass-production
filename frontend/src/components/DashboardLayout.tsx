@@ -51,7 +51,7 @@ const LOGO_URL = "https://d2xsxph8kpxj0f.cloudfront.net/310519663339590706/WvLXd
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: FolderKanban, label: "Rocks", path: "/projects" },
+  { icon: FolderKanban, label: "Projects", path: "/projects" },
   { icon: CheckSquare, label: "My To-Dos", path: "/my-tasks" },
   { icon: Megaphone, label: "Announcements", path: "/announcements" },
   { icon: CalendarDays, label: "Calendar", path: "/calendar" },

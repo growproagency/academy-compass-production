@@ -340,25 +340,27 @@ function AnnouncementCard({
               )}
             </div>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="h-7 w-7 shrink-0 inline-flex items-center justify-center rounded-md hover:bg-accent transition-colors">
-                <MoreVertical className="h-4 w-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={onTogglePin} className="gap-2">
-                {a.isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-                {a.isPinned ? "Unpin" : "Pin to top"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onEdit} className="gap-2">
-                <Pencil className="h-4 w-4" /> Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onDelete} className="gap-2 text-destructive focus:text-destructive">
-                <Trash2 className="h-4 w-4" /> Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {isAdmin && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="h-7 w-7 shrink-0 inline-flex items-center justify-center rounded-md hover:bg-accent transition-colors">
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onTogglePin} className="gap-2">
+                  {a.isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                  {a.isPinned ? "Unpin" : "Pin to top"}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onEdit} className="gap-2">
+                  <Pencil className="h-4 w-4" /> Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onDelete} className="gap-2 text-destructive focus:text-destructive">
+                  <Trash2 className="h-4 w-4" /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </CardContent>
     </Card>
