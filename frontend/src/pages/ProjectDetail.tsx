@@ -78,6 +78,17 @@ import { Separator } from "@/components/ui/separator";
 import { MessageSquare, Send, PartyPopper } from "lucide-react";
 import confetti from "canvas-confetti";
 
+/** Convert a UTC timestamp to a local YYYY-MM-DD string for date inputs */
+function formatLocalDate(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Parse a YYYY-MM-DD string as local noon to avoid timezone day-shift */
+function parseLocalDate(dateStr: string): number {
+  return new Date(dateStr + "T12:00:00").getTime();
+}
+
 // ─── Milestone form dialog ────────────────────────────────────────────────────
 function MilestoneDialog({
   open,
@@ -101,7 +112,7 @@ function MilestoneDialog({
     if (open) {
       setTitle(milestone?.title ?? "");
       setDescription(milestone?.description ?? "");
-      setDueDate(milestone?.dueDate ? new Date(milestone.dueDate).toISOString().split("T")[0] : "");
+      setDueDate(milestone?.dueDate ? formatLocalDate(milestone.dueDate) : "");
     }
   }, [open, milestone]);
 
@@ -110,7 +121,7 @@ function MilestoneDialog({
 
   const handleSubmit = () => {
     if (!title.trim()) return;
-    const dueDateMs = dueDate ? new Date(dueDate).getTime() : undefined;
+    const dueDateMs = dueDate ? parseLocalDate(dueDate) : undefined;
     // Close immediately — optimistic UI handles the rest
     onOpenChange(false);
     onSuccess();
@@ -514,10 +525,10 @@ export default function ProjectDetail() {
                               <CalendarDays className="h-3 w-3 shrink-0" />
                               <input
                                 type="date"
-                                value={m.dueDate ? new Date(m.dueDate).toISOString().split("T")[0] : ""}
+                                value={m.dueDate ? formatLocalDate(m.dueDate) : ""}
                                 onChange={(e) => {
                                   const val = e.target.value;
-                                  const ms = val ? new Date(val).getTime() : null;
+                                  const ms = val ? parseLocalDate(val) : null;
                                   updateMilestoneDueDate.mutate(
                                     { id: m.id, dueDate: ms, projectId },
                                     { onError: (e: any) => toast.error(e.message) }

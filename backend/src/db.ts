@@ -841,7 +841,7 @@ export async function getMilestonesForCalendar(userId: number, isAdmin: boolean,
 // ─── Milestones ───────────────────────────────────────────────────────────────
 
 export async function getMilestonesByProject(projectId: number): Promise<Milestone[]> {
-  const { data } = await supabase.from("milestones").select("*").eq("projectId", projectId).order("sortOrder", { ascending: true });
+  const { data } = await supabase.from("milestones").select("*").eq("projectId", projectId).order("dueDate", { ascending: true, nullsFirst: false }).order("sortOrder", { ascending: true });
   return (data ?? []).map((r: Record<string, unknown>) => mapMilestone(r));
 }
 
@@ -886,7 +886,7 @@ async function _enrichProjectsWithStats(projectList: Project[]) {
   const { data: ownerRows } = await supabase.from("users").select("*").in("id", ownerIds);
   const ownerMap = new Map((ownerRows ?? []).map((u: Record<string, unknown>) => [u.id as number, mapUser(u)]));
   const taskCounts = await getProjectTaskCounts(projectIds);
-  const { data: milestoneRows } = await supabase.from("milestones").select("id, projectId, title, completedAt, dueDate").in("projectId", projectIds);
+  const { data: milestoneRows } = await supabase.from("milestones").select("id, projectId, title, completedAt, dueDate").in("projectId", projectIds).order("dueDate", { ascending: true, nullsFirst: false }).order("sortOrder", { ascending: true });
   const now = Date.now();
   const milestoneMap = new Map<number, { total: number; done: number; overdue: number; preview: Array<{ id: number; title: string; completedAt: number | null; dueDate: number | null }> }>();
   for (const m of (milestoneRows ?? []) as Array<{ id: number; projectId: number; title: string; completedAt: number | null; dueDate: number | null }>) {
