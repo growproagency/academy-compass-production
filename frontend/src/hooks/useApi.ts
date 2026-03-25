@@ -528,15 +528,21 @@ export function useUpdateMilestone() {
       await qc.cancelQueries({ queryKey: QK.projectsWithStats });
       const previous = qc.getQueryData(QK.milestones(projectId));
       const prevStats = qc.getQueryData(QK.projectsWithStats);
+      const sortByDate = (a: any, b: any) => {
+        if (a.dueDate == null && b.dueDate == null) return 0;
+        if (a.dueDate == null) return 1;
+        if (b.dueDate == null) return -1;
+        return a.dueDate - b.dueDate;
+      };
       qc.setQueryData(QK.milestones(projectId), (old: any[]) =>
-        (old ?? []).map((m) => m.id === id ? { ...m, ...data } : m)
+        (old ?? []).map((m) => m.id === id ? { ...m, ...data } : m).sort(sortByDate)
       );
       qc.setQueryData(QK.projectsWithStats, (old: any[]) =>
         (old ?? []).map((p: any) => p.id === projectId ? {
           ...p,
           milestonePreview: (p.milestonePreview ?? []).map((m: any) =>
             m.id === id ? { ...m, ...data } : m
-          ),
+          ).sort(sortByDate),
         } : p)
       );
       return { previous, prevStats };
@@ -598,7 +604,31 @@ export function useDeleteMilestone() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id }: { id: number; projectId: number }) => api.milestones.delete(id),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: QK.milestones(v.projectId) }),
+    onMutate: async ({ id, projectId }) => {
+      await qc.cancelQueries({ queryKey: QK.milestones(projectId) });
+      await qc.cancelQueries({ queryKey: QK.projectsWithStats });
+      const previous = qc.getQueryData(QK.milestones(projectId));
+      const prevStats = qc.getQueryData(QK.projectsWithStats);
+      qc.setQueryData(QK.milestones(projectId), (old: any[]) =>
+        (old ?? []).filter((m) => m.id !== id)
+      );
+      qc.setQueryData(QK.projectsWithStats, (old: any[]) =>
+        (old ?? []).map((p: any) => p.id !== projectId ? p : {
+          ...p,
+          milestoneTotal: Math.max(0, (p.milestoneTotal ?? 0) - 1),
+          milestonePreview: (p.milestonePreview ?? []).filter((m: any) => m.id !== id),
+        })
+      );
+      return { previous, prevStats };
+    },
+    onError: (_e, v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.milestones(v.projectId), ctx.previous);
+      if (ctx?.prevStats) qc.setQueryData(QK.projectsWithStats, ctx.prevStats);
+    },
+    onSettled: (_d, _e, v) => {
+      qc.invalidateQueries({ queryKey: QK.milestones(v.projectId) });
+      qc.invalidateQueries({ queryKey: QK.projectsWithStats });
+    },
   });
 }
 

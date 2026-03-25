@@ -341,23 +341,13 @@ export default function Projects() {
   const handleQuickMilestoneSubmit = (projectId: number) => {
     const title = quickMilestoneTitle.trim();
     if (!title) return;
-    setQuickMilestonePending(true);
     const dueDateTs = quickMilestoneDueDate ? parseLocalDate(quickMilestoneDueDate) : undefined;
+    setQuickMilestoneProjectId(null);
+    setQuickMilestoneTitle("");
+    setQuickMilestoneDueDate("");
     createMilestoneMutation.mutate(
       { projectId, title, dueDate: dueDateTs },
-      {
-        onSuccess: () => {
-          setQuickMilestoneProjectId(null);
-          setQuickMilestoneTitle("");
-          setQuickMilestoneDueDate("");
-          setQuickMilestonePending(false);
-          toast.success("Milestone added");
-        },
-        onError: (err: any) => {
-          toast.error(err.message);
-          setQuickMilestonePending(false);
-        },
-      }
+      { onError: (err: any) => toast.error(err.message) }
     );
   };
 
@@ -647,7 +637,7 @@ export default function Projects() {
                                   }
                                 }}
                               >
-                                <span className={`truncate text-muted-foreground ${m.completedAt ? "line-through opacity-50" : ""}`}>
+                                <span className={`flex-1 truncate text-muted-foreground ${m.completedAt ? "line-through opacity-50" : ""}`}>
                                   {m.title}
                                 </span>
                                 {m.dueDate && (
