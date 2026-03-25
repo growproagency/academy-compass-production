@@ -228,16 +228,27 @@
   border: 1px solid oklch(0.88 0.008 250);
   box-shadow: 0 1px 4px oklch(0.15 0.018 255 / 0.06), 0 4px 16px oklch(0.15 0.018 255 / 0.04);
 }
+.dark .glass-card {
+  background: oklch(0.25 0.018 255);
+  border: 1px solid oklch(0.32 0.018 255);
+  box-shadow: 0 1px 4px oklch(0 0 0 / 0.3), 0 4px 16px oklch(0 0 0 / 0.2);
+}
 
 /* ─── Priority badges ────────────────────────────────────────────────────────── */
 .badge-low    { background: oklch(0.52 0.18 160 / 0.10); color: oklch(0.38 0.16 160); border: 1px solid oklch(0.52 0.18 160 / 0.28); }
 .badge-medium { background: oklch(0.65 0.18 55  / 0.12); color: oklch(0.45 0.16 55);  border: 1px solid oklch(0.65 0.18 55  / 0.30); }
 .badge-high   { background: oklch(0.55 0.22 25  / 0.10); color: oklch(0.45 0.20 25);  border: 1px solid oklch(0.55 0.22 25  / 0.28); }
+.dark .badge-low    { background: oklch(0.52 0.18 160 / 0.15); color: oklch(0.72 0.16 160); border: 1px solid oklch(0.52 0.18 160 / 0.35); }
+.dark .badge-medium { background: oklch(0.65 0.18 55  / 0.15); color: oklch(0.78 0.16 55);  border: 1px solid oklch(0.65 0.18 55  / 0.35); }
+.dark .badge-high   { background: oklch(0.55 0.22 25  / 0.15); color: oklch(0.72 0.20 25);  border: 1px solid oklch(0.55 0.22 25  / 0.35); }
 
 /* ─── Status badges ──────────────────────────────────────────────────────────── */
 .badge-todo        { background: oklch(0.94 0.006 250);          color: oklch(0.42 0.014 255); border: 1px solid oklch(0.86 0.010 250); }
 .badge-in-progress { background: oklch(0.52 0.24 270 / 0.10);   color: oklch(0.40 0.22 270);  border: 1px solid oklch(0.52 0.24 270 / 0.28); }
 .badge-done        { background: oklch(0.52 0.18 160 / 0.10);   color: oklch(0.38 0.16 160);  border: 1px solid oklch(0.52 0.18 160 / 0.28); }
+.dark .badge-todo        { background: oklch(0.22 0.012 250);          color: oklch(0.72 0.010 250); border: 1px solid oklch(0.30 0.014 250); }
+.dark .badge-in-progress { background: oklch(0.52 0.24 270 / 0.15);   color: oklch(0.72 0.20 270);  border: 1px solid oklch(0.52 0.24 270 / 0.35); }
+.dark .badge-done        { background: oklch(0.52 0.18 160 / 0.15);   color: oklch(0.72 0.16 160);  border: 1px solid oklch(0.52 0.18 160 / 0.35); }
 
 /* ─── Task card ──────────────────────────────────────────────────────────────── */
 .task-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
@@ -272,4 +283,14 @@
   background: oklch(0.52 0.24 270 / 0.08);
   border-color: oklch(0.52 0.24 270 / 0.25);
   color: oklch(0.20 0.018 255);
+}
+.dark .comment-bubble {
+  background: oklch(0.22 0.018 255);
+  border-color: oklch(0.30 0.018 255);
+  color: oklch(0.90 0.008 250);
+}
+.dark .comment-bubble.own {
+  background: oklch(0.52 0.24 270 / 0.15);
+  border-color: oklch(0.52 0.24 270 / 0.35);
+  color: oklch(0.90 0.008 250);
 }

@@ -71,7 +71,7 @@ import {
   Users,
   Activity,
 } from "lucide-react";
-import { useState, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
@@ -92,12 +92,18 @@ function MilestoneDialog({
   milestone?: { id: number; title: string; description: string | null; dueDate: number | null };
   onSuccess: () => void;
 }) {
-  const [title, setTitle] = useState(milestone?.title ?? "");
-  const [description, setDescription] = useState(milestone?.description ?? "");
-  const [dueDate, setDueDate] = useState(
-    milestone?.dueDate ? new Date(milestone.dueDate).toISOString().split("T")[0] : ""
-  );
-  const qc = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState("");
+
+  // Reset form when dialog opens or milestone changes
+  useEffect(() => {
+    if (open) {
+      setTitle(milestone?.title ?? "");
+      setDescription(milestone?.description ?? "");
+      setDueDate(milestone?.dueDate ? new Date(milestone.dueDate).toISOString().split("T")[0] : "");
+    }
+  }, [open, milestone]);
 
   const create = useCreateMilestone();
   const update = useUpdateMilestone();
@@ -105,36 +111,21 @@ function MilestoneDialog({
   const handleSubmit = () => {
     if (!title.trim()) return;
     const dueDateMs = dueDate ? new Date(dueDate).getTime() : undefined;
+    // Close immediately — optimistic UI handles the rest
+    onOpenChange(false);
+    onSuccess();
     if (milestone) {
       update.mutate(
         { id: milestone.id, projectId, title: title.trim(), description: description.trim() || undefined, dueDate: dueDateMs ?? null },
-        {
-          onSuccess: () => {
-            toast.success("Milestone updated");
-            qc.invalidateQueries({ queryKey: QK.milestones(projectId) });
-            onSuccess();
-            onOpenChange(false);
-          },
-          onError: (e: any) => toast.error(e.message),
-        }
+        { onError: (e: any) => toast.error(e.message) }
       );
     } else {
       create.mutate(
         { projectId, title: title.trim(), description: description.trim() || undefined, dueDate: dueDateMs },
-        {
-          onSuccess: () => {
-            toast.success("Milestone created");
-            qc.invalidateQueries({ queryKey: QK.milestones(projectId) });
-            onSuccess();
-            onOpenChange(false);
-          },
-          onError: (e: any) => toast.error(e.message),
-        }
+        { onError: (e: any) => toast.error(e.message) }
       );
     }
   };
-
-  const isPending = create.isPending || update.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -168,8 +159,7 @@ function MilestoneDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button disabled={!title.trim() || isPending} onClick={handleSubmit}>
-            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button disabled={!title.trim()} onClick={handleSubmit}>
             {milestone ? "Save" : "Create"}
           </Button>
         </DialogFooter>
