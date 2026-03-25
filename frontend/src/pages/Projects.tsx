@@ -62,6 +62,11 @@ import { Progress } from "@/components/ui/progress";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+
+/** Parse a YYYY-MM-DD string as local noon to avoid timezone day-shift */
+function parseLocalDate(dateStr: string): number {
+  return new Date(dateStr + "T12:00:00").getTime();
+}
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -176,7 +181,7 @@ function ProjectFormDialog({
     if (!name.trim()) return;
     // Convert "YYYY-MM-DD" → UTC midnight ms timestamp (or null)
     const dueDate = dueDateStr
-      ? new Date(dueDateStr + "T00:00:00").getTime()
+      ? parseLocalDate(dueDateStr)
       : null;
 
     if (project) {
@@ -320,22 +325,16 @@ export default function Projects() {
   const toggleMilestoneMutation = useToggleMilestone();
   const updateMilestoneMutation = useUpdateMilestone();
 
-  const handleMilestoneEditSave = (id: number) => {
+  const handleMilestoneEditSave = (id: number, projectId: number) => {
     const title = editingMilestoneTitle.trim();
     if (!title) { setEditingMilestoneId(null); return; }
     const dueDate = editingMilestoneDueDate
-      ? new Date(editingMilestoneDueDate + "T00:00:00").getTime()
+      ? parseLocalDate(editingMilestoneDueDate)
       : null;
+    setEditingMilestoneId(null);
     updateMilestoneMutation.mutate(
-      { id, title, dueDate },
-      {
-        onSuccess: () => {
-          qc.invalidateQueries({ queryKey: QK.projectsWithStats });
-          setEditingMilestoneId(null);
-          toast.success("Milestone updated");
-        },
-        onError: (err: any) => toast.error(err.message),
-      }
+      { id, projectId, title, dueDate },
+      { onError: (err: any) => toast.error(err.message) }
     );
   };
 
@@ -343,7 +342,7 @@ export default function Projects() {
     const title = quickMilestoneTitle.trim();
     if (!title) return;
     setQuickMilestonePending(true);
-    const dueDateTs = quickMilestoneDueDate ? new Date(quickMilestoneDueDate).getTime() : undefined;
+    const dueDateTs = quickMilestoneDueDate ? parseLocalDate(quickMilestoneDueDate) : undefined;
     createMilestoneMutation.mutate(
       { projectId, title, dueDate: dueDateTs },
       {
@@ -619,10 +618,10 @@ export default function Projects() {
                                   value={editingMilestoneTitle}
                                   onChange={(e) => setEditingMilestoneTitle(e.target.value)}
                                   onKeyDown={(e) => {
-                                    if (e.key === "Enter") handleMilestoneEditSave(m.id);
+                                    if (e.key === "Enter") handleMilestoneEditSave(m.id, project.id);
                                     if (e.key === "Escape") setEditingMilestoneId(null);
                                   }}
-                                  onBlur={() => handleMilestoneEditSave(m.id)}
+                                  onBlur={() => handleMilestoneEditSave(m.id, project.id)}
                                 />
                                 <input
                                   type="date"
