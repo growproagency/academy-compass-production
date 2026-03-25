@@ -282,7 +282,7 @@ export default function ProjectDetail() {
   };
   const { data: comments, isLoading: commentsLoading } = useProjectComments(projectId);
 
-  const addComment = useCreateProjectComment();
+  const addComment = useCreateProjectComment(user ? { id: user.id, name: user.name } : undefined);
   const deleteComment = useDeleteProjectComment();
 
   const handleAddComment = () => {

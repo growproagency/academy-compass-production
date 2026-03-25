@@ -28,7 +28,17 @@ const PORT = process.env.PORT || 3001;
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: (origin, callback) => {
+    const allowed = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || "http://localhost:5173")
+      .split(",")
+      .map(s => s.trim());
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin || allowed.some(o => origin === o || origin.endsWith("." + new URL(o).host))) {
+      callback(null, origin || true);
+    } else {
+      callback(null, false);
+    }
+  },
   credentials: true,
 }));
 

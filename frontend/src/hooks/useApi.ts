@@ -683,12 +683,26 @@ export function useProjectComments(projectId: number) {
   return useQuery({ queryKey: QK.projectComments(projectId), queryFn: () => api.projectComments.list(projectId), enabled: !!projectId });
 }
 
-export function useCreateProjectComment() {
+export function useCreateProjectComment(currentUser?: { id: number; name?: string | null }) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ projectId, content }: { projectId: number; content: string }) =>
       api.projectComments.create(projectId, content),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: QK.projectComments(v.projectId) }),
+    onMutate: async ({ projectId, content }) => {
+      await qc.cancelQueries({ queryKey: QK.projectComments(projectId) });
+      const previous = qc.getQueryData(QK.projectComments(projectId));
+      if (currentUser) {
+        qc.setQueryData(QK.projectComments(projectId), (old: any[] = []) => [
+          ...old,
+          { id: -Date.now(), projectId, authorId: currentUser.id, authorName: currentUser.name ?? "You", content, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+        ]);
+      }
+      return { previous };
+    },
+    onError: (_e, v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.projectComments(v.projectId), ctx.previous);
+    },
+    onSettled: (_d, _e, v) => qc.invalidateQueries({ queryKey: QK.projectComments(v.projectId) }),
   });
 }
 
