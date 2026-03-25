@@ -886,7 +886,8 @@ export default function Dashboard() {
                 return (
                   <div
                     key={status}
-                    className={`kanban-col flex flex-col transition-all ${isDragTarget ? "drag-over" : ""}`}
+                    className={`kanban-col flex flex-col transition-all rounded-xl ${isDragTarget ? "drag-over" : ""}`}
+                    style={{ backgroundColor: "var(--muted)", border: "1px solid var(--border)" }}
                     onDragOver={(e) => { e.preventDefault(); if (!selectMode) setDragOverCol(status); }}
                     onDragLeave={() => setDragOverCol(null)}
                     onDrop={(e) => { if (!selectMode) handleDrop(e, status); }}

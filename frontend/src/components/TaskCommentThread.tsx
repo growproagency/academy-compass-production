@@ -108,12 +108,7 @@ export function TaskCommentThread({ taskId, taskTitle, open, onOpenChange }: Tas
     createMutation.mutate(
       { taskId, content: trimmed },
       {
-        onSuccess: (newComment) => {
-          qc.setQueryData(QK.comments(taskId), (old: any) => {
-            const c = newComment as unknown as Comment;
-            const updated = old ? [...old, c] : [c];
-            return updated;
-          });
+        onSuccess: () => {
           setContent("");
           setSubmitting(false);
           setTimeout(() => {

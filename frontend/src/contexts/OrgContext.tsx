@@ -23,16 +23,28 @@ const OrgContext = createContext<OrgContextValue>({
   refresh: async () => {},
 });
 
+/** Lighten an oklch color for dark mode readability */
+function lightenForDark(color: string): string {
+  // Match oklch(L C H) or oklch(L C H / A)
+  const m = color.match(/oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)/);
+  if (!m) return color;
+  const l = parseFloat(m[1]);
+  const c = m[2], h = m[3];
+  // Bump lightness to at least 0.65 for dark backgrounds
+  const newL = Math.max(l, 0.65);
+  return `oklch(${newL} ${c} ${h})`;
+}
+
 function applyBrandColors(org: Org) {
   const root = document.documentElement;
+  const isDark = root.classList.contains("dark");
   if (org.brandPrimaryColor) {
-    root.style.setProperty("--primary", org.brandPrimaryColor);
-    // Keep foreground white for contrast
+    const primary = isDark ? lightenForDark(org.brandPrimaryColor) : org.brandPrimaryColor;
+    root.style.setProperty("--primary", primary);
     root.style.setProperty("--primary-foreground", "oklch(0.99 0.002 240)");
-    // Apply to sidebar primary too
-    root.style.setProperty("--sidebar-primary", org.brandPrimaryColor);
+    root.style.setProperty("--sidebar-primary", primary);
     root.style.setProperty("--sidebar-primary-foreground", "oklch(0.99 0.002 240)");
-    root.style.setProperty("--ring", org.brandPrimaryColor);
+    root.style.setProperty("--ring", primary);
   } else {
     root.style.removeProperty("--primary");
     root.style.removeProperty("--primary-foreground");
@@ -41,7 +53,8 @@ function applyBrandColors(org: Org) {
     root.style.removeProperty("--ring");
   }
   if (org.brandAccentColor) {
-    root.style.setProperty("--accent", org.brandAccentColor);
+    const accent = isDark ? lightenForDark(org.brandAccentColor) : org.brandAccentColor;
+    root.style.setProperty("--accent", accent);
     root.style.setProperty("--accent-foreground", "oklch(0.99 0.002 160)");
   } else {
     root.style.removeProperty("--accent");
@@ -68,6 +81,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetchOrg();
   }, []);
+
+  // Re-apply brand colors when dark/light mode changes
+  useEffect(() => {
+    if (!org) return;
+    const observer = new MutationObserver(() => applyBrandColors(org));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, [org]);
 
   return (
     <OrgContext.Provider value={{ org, loading, refresh: fetchOrg }}>

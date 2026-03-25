@@ -694,7 +694,7 @@ export function useCreateProjectComment(currentUser?: { id: number; name?: strin
       if (currentUser) {
         qc.setQueryData(QK.projectComments(projectId), (old: any[] = []) => [
           ...old,
-          { id: -Date.now(), projectId, authorId: currentUser.id, authorName: currentUser.name ?? "You", content, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+          { id: -Date.now(), projectId, authorId: currentUser.id, author: { name: currentUser.name ?? "You" }, content, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
         ]);
       }
       return { previous };
@@ -710,7 +710,16 @@ export function useDeleteProjectComment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, projectId }: { id: number; projectId: number }) => api.projectComments.delete(id),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: QK.projectComments(v.projectId) }),
+    onMutate: async ({ id, projectId }) => {
+      await qc.cancelQueries({ queryKey: QK.projectComments(projectId) });
+      const previous = qc.getQueryData(QK.projectComments(projectId));
+      qc.setQueryData(QK.projectComments(projectId), (old: any[] = []) => old.filter((c) => c.id !== id));
+      return { previous };
+    },
+    onError: (_e, v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.projectComments(v.projectId), ctx.previous);
+    },
+    onSettled: (_d, _e, v) => qc.invalidateQueries({ queryKey: QK.projectComments(v.projectId) }),
   });
 }
 
