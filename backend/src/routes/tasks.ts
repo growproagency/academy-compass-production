@@ -2,7 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
 import { requireOrg } from "../middleware/org";
 import {
-  getTaskById, getTasksByProject, listAllTasks, getTasksForCalendar, listArchivedTasks,
+  getTaskById, getTasksByProject, listAllTasks, listTasksPaginated, getTasksForCalendar, listArchivedTasks,
   createTask, updateTask, deleteTask, archiveTask, restoreTask, reorderTask, searchTasks,
   getSubtasksByTask, getSubtaskById, createSubtask, toggleSubtask, deleteSubtask,
   getCommentsByTask, createComment, deleteComment, getCommentById,
@@ -39,6 +39,23 @@ router.get("/", requireAuth, requireOrg, async (req, res) => {
       if (!isMember && user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
       return res.json(await getTasksByProject(projectId));
     }
+    // Paginated response when page param is present
+    if (req.query.page) {
+      const page = Math.max(1, Number(req.query.page));
+      const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+      const result = await listTasksPaginated(user.id, user.role === "admin", org.id, page, limit);
+      if (result.data.length > 0) {
+        const taskIds = result.data.map((t: any) => t.id);
+        const subtaskCounts = await getSubtaskCountsByTasks(taskIds);
+        result.data = result.data.map((t: any) => ({
+          ...t,
+          subtaskTotal: (subtaskCounts as Map<number, any>).get(t.id)?.total ?? 0,
+          subtaskDone: (subtaskCounts as Map<number, any>).get(t.id)?.done ?? 0,
+        }));
+      }
+      return res.json({ data: result.data, total: result.total, page, limit });
+    }
+
     const taskList = await listAllTasks(user.id, user.role === "admin", org.id);
     if (taskList.length === 0) return res.json([]);
     const taskIds = taskList.map((t: any) => t.id);

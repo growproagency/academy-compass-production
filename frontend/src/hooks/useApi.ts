@@ -25,6 +25,7 @@ export const QK = {
   project: (id: number) => ["projects", id] as const,
   projectMembers: (id: number) => ["projects", id, "members"] as const,
   tasks: ["tasks"] as const,
+  tasksPaginated: (page: number, limit: number) => ["tasks", "paginated", page, limit] as const,
   task: (id: number) => ["tasks", id] as const,
   tasksByProject: (pid: number) => ["tasks", "project", pid] as const,
   calendarTasks: ["tasks", "calendar"] as const,
@@ -232,6 +233,14 @@ export function useRemoveProjectMember() {
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 export function useTasks() {
   return useQuery({ queryKey: QK.tasks, queryFn: () => api.tasks.listAll() });
+}
+
+export function useTasksPaginated(page: number, limit = 20) {
+  return useQuery({
+    queryKey: QK.tasksPaginated(page, limit),
+    queryFn: () => api.tasks.listPaginated(page, limit),
+    placeholderData: (prev: any) => prev,
+  });
 }
 
 export function useTasksByProject(projectId: number) {

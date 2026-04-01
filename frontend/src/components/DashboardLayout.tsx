@@ -1,4 +1,5 @@
 import { useAuth } from "@/hooks/useAuth";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -211,6 +212,9 @@ function DashboardLayoutContent({
       document.body.style.userSelect = "";
     };
   }, [isResizing, setSidebarWidth]);
+
+  // Subscribe to Supabase Realtime for live updates across users in the same org
+  useRealtimeSync(org.id);
 
   // Prefetch data for tabs so it's already cached when the user navigates to them
   useProjectsWithStats();

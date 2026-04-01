@@ -450,6 +450,28 @@ export async function listAllTasks(userId: number, isAdmin: boolean, orgId: numb
   return (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
 }
 
+export async function listTasksPaginated(
+  userId: number, isAdmin: boolean, orgId: number, page: number, limit: number
+): Promise<{ data: Task[]; total: number }> {
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  let query = supabase
+    .from("tasks")
+    .select("*", { count: "exact" })
+    .eq("organizationId", orgId)
+    .is("archivedAt", null)
+    .order("sortOrder", { ascending: true })
+    .range(from, to);
+
+  if (!isAdmin) {
+    query = query.or(`creatorId.eq.${userId},assigneeId.eq.${userId}`);
+  }
+
+  const { data, count } = await query;
+  return { data: (data ?? []).map((r: Record<string, unknown>) => mapTask(r)), total: count ?? 0 };
+}
+
 export async function listArchivedTasks(userId: number, isAdmin: boolean, orgId: number): Promise<Task[]> {
   if (isAdmin) {
     const { data } = await supabase
@@ -667,16 +689,38 @@ export async function getDashboardStats(userId: number, isAdmin: boolean, orgId:
   overdueTasks: number;
   totalProjects: number;
 }> {
-  const allTasks = await listAllTasks(userId, isAdmin, orgId);
   const now = Date.now();
+
+  const baseQuery = () => {
+    let q = supabase.from("tasks").select("*", { count: "exact", head: true })
+      .eq("organizationId", orgId)
+      .is("archivedAt", null);
+    if (!isAdmin) q = q.or(`creatorId.eq.${userId},assigneeId.eq.${userId}`);
+    return q;
+  };
+
+  const [totalRes, doneRes, inProgressRes, overdueRes] = await Promise.all([
+    baseQuery(),
+    baseQuery().eq("status", "done"),
+    baseQuery().eq("status", "in_progress"),
+    baseQuery().neq("status", "done").not("dueDate", "is", null).lt("dueDate", now),
+  ]);
+
+  let totalProjects: number;
+  if (isAdmin) {
+    const { count } = await supabase.from("projects").select("*", { count: "exact", head: true })
+      .eq("organizationId", orgId);
+    totalProjects = count ?? 0;
+  } else {
+    totalProjects = (await listProjectsForUser(userId, orgId)).length;
+  }
+
   return {
-    totalTasks: allTasks.length,
-    doneTasks: allTasks.filter((t) => t.status === "done").length,
-    inProgressTasks: allTasks.filter((t) => t.status === "in_progress").length,
-    overdueTasks: allTasks.filter((t) => t.status !== "done" && t.dueDate && t.dueDate < now).length,
-    totalProjects: isAdmin
-      ? (await listAllProjects(orgId)).length
-      : (await listProjectsForUser(userId, orgId)).length,
+    totalTasks: totalRes.count ?? 0,
+    doneTasks: doneRes.count ?? 0,
+    inProgressTasks: inProgressRes.count ?? 0,
+    overdueTasks: overdueRes.count ?? 0,
+    totalProjects,
   };
 }
 
