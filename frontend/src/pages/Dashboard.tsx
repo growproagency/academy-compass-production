@@ -41,7 +41,6 @@ import {
   useReorderTask,
   useBulkDeleteTasks,
   useAnnouncements,
-  useDashboardStats,
 } from "@/hooks/useApi";
 import {
   AlertCircle,
@@ -156,7 +155,6 @@ export default function Dashboard() {
   const { data: _projectsWithStats, isLoading: projectsLoading } = useProjectsWithStats();
   const { data: _healthTrend } = useHealthTrend();
   const { data: _users } = useUsers();
-  const { data: stats } = useDashboardStats();
 
   // Cast from unknown to typed arrays
   const allTasks = _allTasks as any[] | undefined;
@@ -171,6 +169,16 @@ export default function Dashboard() {
   // Build lookup maps — reuse projectsWithStats (already prefetched) instead of a separate projects.list fetch
   const projectMap = new Map((projectsWithStats ?? []).map((p: any) => [p.id, p.name]));
   const userMap = new Map((users ?? []).map((u: any) => [u.id, u.name]));
+
+  // Derive stats locally from allTasks — instant, no extra round-trip
+  const now = Date.now();
+  const stats = allTasks ? {
+    totalTasks: allTasks.length,
+    doneTasks: allTasks.filter((t: any) => t.status === "done").length,
+    inProgressTasks: allTasks.filter((t: any) => t.status === "in_progress").length,
+    overdueTasks: allTasks.filter((t: any) => t.status !== "done" && t.dueDate && t.dueDate < now).length,
+    totalProjects: projectsWithStats?.length ?? 0,
+  } : null;
 
   // Filter & sort tasks
   const filteredTasks = (allTasks ?? []).filter((t: any) => {

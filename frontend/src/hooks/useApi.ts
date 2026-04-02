@@ -146,11 +146,11 @@ export function useCreateProject() {
     onSuccess: (newProject: any) => {
       // Immediately add the new project to both caches so the UI updates without waiting for a refetch
       qc.setQueryData(QK.projects, (old: unknown) =>
-        Array.isArray(old) ? [...old, newProject] : old
+        Array.isArray(old) ? [newProject, ...old] : old
       );
       qc.setQueryData(QK.projectsWithStats, (old: unknown) =>
         Array.isArray(old)
-          ? [...old, { ...newProject, taskTotal: 0, taskDone: 0, milestoneTotal: 0, milestoneDone: 0, milestonePreview: [] }]
+          ? [{ ...newProject, taskTotal: 0, taskDone: 0, milestoneTotal: 0, milestoneDone: 0, milestonePreview: [] }, ...old]
           : old
       );
       // Background refetch for eventual consistency

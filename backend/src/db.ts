@@ -691,35 +691,27 @@ export async function getDashboardStats(userId: number, isAdmin: boolean, orgId:
 }> {
   const now = Date.now();
 
-  const baseQuery = () => {
-    let q = supabase.from("tasks").select("*", { count: "exact", head: true })
-      .eq("organizationId", orgId)
-      .is("archivedAt", null);
-    if (!isAdmin) q = q.or(`creatorId.eq.${userId},assigneeId.eq.${userId}`);
-    return q;
-  };
-
-  const [totalRes, doneRes, inProgressRes, overdueRes] = await Promise.all([
-    baseQuery(),
-    baseQuery().eq("status", "done"),
-    baseQuery().eq("status", "in_progress"),
-    baseQuery().neq("status", "done").not("dueDate", "is", null).lt("dueDate", now),
+  // Single RPC call for all 4 task counts
+  const [taskStatsRes, projectCount] = await Promise.all([
+    supabase.rpc("get_task_stats", {
+      p_org_id: orgId,
+      p_user_id: userId,
+      p_is_admin: isAdmin,
+      p_now: now,
+    }),
+    isAdmin
+      ? supabase.from("projects").select("*", { count: "exact", head: true }).eq("organizationId", orgId)
+      : listProjectsForUser(userId, orgId),
   ]);
 
-  let totalProjects: number;
-  if (isAdmin) {
-    const { count } = await supabase.from("projects").select("*", { count: "exact", head: true })
-      .eq("organizationId", orgId);
-    totalProjects = count ?? 0;
-  } else {
-    totalProjects = (await listProjectsForUser(userId, orgId)).length;
-  }
+  const stats = taskStatsRes.data ?? { totalTasks: 0, doneTasks: 0, inProgressTasks: 0, overdueTasks: 0 };
+  const totalProjects = isAdmin ? ((projectCount as any).count ?? 0) : (projectCount as any[]).length;
 
   return {
-    totalTasks: totalRes.count ?? 0,
-    doneTasks: doneRes.count ?? 0,
-    inProgressTasks: inProgressRes.count ?? 0,
-    overdueTasks: overdueRes.count ?? 0,
+    totalTasks: stats.totalTasks ?? 0,
+    doneTasks: stats.doneTasks ?? 0,
+    inProgressTasks: stats.inProgressTasks ?? 0,
+    overdueTasks: stats.overdueTasks ?? 0,
     totalProjects,
   };
 }
