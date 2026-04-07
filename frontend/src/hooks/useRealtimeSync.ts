@@ -89,20 +89,7 @@ export function useRealtimeSync(orgId: number) {
           if (!isMyOrg(payload)) return;
           const { eventType, new: newRow, old: oldRow } = payload;
 
-          if (eventType === "INSERT" && newRow) {
-            // Add to projects list
-            qc.setQueryData(QK.projects, (old: any) => {
-              if (!Array.isArray(old)) return old;
-              if (old.some((p: any) => Number(p.id) === Number(newRow.id))) return old;
-              return [newRow, ...old];
-            });
-            // Add to projectsWithStats with empty stats
-            qc.setQueryData(QK.projectsWithStats, (old: any) => {
-              if (!Array.isArray(old)) return old;
-              if (old.some((p: any) => Number(p.id) === Number(newRow.id))) return old;
-              return [{ ...newRow, taskTotal: 0, taskDone: 0, milestoneTotal: 0, milestoneDone: 0, milestonePreview: [] }, ...old];
-            });
-          } else if (eventType === "UPDATE" && newRow) {
+          if (eventType === "UPDATE" && newRow) {
             const id = Number(newRow.id);
             patchItemInCache(qc, QK.projects, id, newRow);
             patchItemInCache(qc, QK.projectsWithStats, id, newRow);
@@ -112,9 +99,9 @@ export function useRealtimeSync(orgId: number) {
             removeFromCache(qc, QK.projectsWithStats, deleteId);
           }
 
-          // Background refetch for enriched data (owner names, stats)
-          debouncedInvalidate(QK.projects);
-          debouncedInvalidate(QK.projectsWithStats);
+          // Refetch project data
+          qc.invalidateQueries({ queryKey: QK.projects });
+          qc.invalidateQueries({ queryKey: QK.projectsWithStats });
           debouncedInvalidate(QK.healthTrend);
           debouncedInvalidate(QK.dashboardStats);
         },
