@@ -31,7 +31,9 @@ import type {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toDate(val: string | null | undefined): Date {
-  return val ? new Date(val) : new Date();
+  if (!val) return new Date();
+  if (!val.endsWith("Z") && !val.includes("+")) return new Date(val + "Z");
+  return new Date(val);
 }
 
 function mapOrg(row: Record<string, unknown>): Organization {

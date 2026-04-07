@@ -188,9 +188,9 @@ export default function TaskCard({
       : `Every ${task.recurrenceInterval} ${task.recurrenceType === "daily" ? "day" : task.recurrenceType === "weekly" ? "week" : "month"}${task.recurrenceInterval > 1 ? "s" : ""}`
     : null;
 
-  // Prefer pre-computed counts from listAll; fall back to lazy-loaded subtasks
-  const subtaskTotal = task.subtaskTotal ?? subtasks?.length ?? 0;
-  const subtaskDone = task.subtaskDone ?? subtasks?.filter((s) => s.completed).length ?? 0;
+  // Prefer live subtasks data when loaded; fall back to pre-computed counts
+  const subtaskTotal = subtasks ? subtasks.length : (task.subtaskTotal ?? 0);
+  const subtaskDone = subtasks ? subtasks.filter((s: any) => s.completed).length : (task.subtaskDone ?? 0);
   const subtaskProgress = subtaskTotal > 0 ? Math.round((subtaskDone / subtaskTotal) * 100) : 0;
 
   // Swipe visual feedback: clamp translateX to ±80px and show edge glow

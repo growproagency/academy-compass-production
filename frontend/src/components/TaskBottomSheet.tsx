@@ -87,8 +87,8 @@ export default function TaskBottomSheet({
   const isDone = task.status === "done";
   const overdue = isOverdue(task.dueDate) && !isDone;
   const statusMeta = STATUS_META[task.status];
-  const subtaskTotal = task.subtaskTotal ?? subtasks?.length ?? 0;
-  const subtaskDone = task.subtaskDone ?? subtasks?.filter((s) => s.completed).length ?? 0;
+  const subtaskTotal = subtasks ? subtasks.length : (task.subtaskTotal ?? 0);
+  const subtaskDone = subtasks ? subtasks.filter((s: any) => s.completed).length : (task.subtaskDone ?? 0);
   const subtaskProgress = subtaskTotal > 0 ? Math.round((subtaskDone / subtaskTotal) * 100) : 0;
 
   const hasRecurrence = task.recurrenceType !== "none";
