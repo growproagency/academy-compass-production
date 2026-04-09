@@ -1223,10 +1223,10 @@ export async function deleteInvite(id: number): Promise<void> {
 }
 
 // ── Invite Links ──────────────────────────────────────────────────────────────
-export async function createInviteLink(data: { organizationId: number; role: "user" | "admin"; invitedBy: number; expiresAt?: number | null }): Promise<any> {
+export async function createInviteLink(data: { organizationId: number; role: "user" | "admin"; invitedBy: number; expiresAt?: number | null; singleUse?: boolean }): Promise<any> {
   const { data: row, error } = await supabase
     .from("invite_links")
-    .insert({ organizationId: data.organizationId, role: data.role, invitedBy: data.invitedBy, expiresAt: data.expiresAt ?? null, createdAt: Date.now() })
+    .insert({ organizationId: data.organizationId, role: data.role, invitedBy: data.invitedBy, expiresAt: data.expiresAt ?? null, singleUse: data.singleUse ?? true, createdAt: Date.now() })
     .select()
     .single();
   if (error) throw new Error(error.message);
@@ -1251,7 +1251,7 @@ export async function listInviteLinks(orgId: number): Promise<any[]> {
     .from("invite_links")
     .select("*")
     .eq("organizationId", orgId)
-    .is("usedAt", null)
+    .or("usedAt.is.null,singleUse.eq.false")
     .order("createdAt", { ascending: false });
   return data ?? [];
 }

@@ -920,8 +920,8 @@ export function useInviteLinks() {
 export function useCreateInviteLink() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ role, expiresInDays }: { role: "user" | "admin"; expiresInDays?: number }) =>
-      api.invites.links.create(role, expiresInDays),
+    mutationFn: ({ role, singleUse = true }: { role: "user" | "admin"; singleUse?: boolean }) =>
+      api.invites.links.create(role, singleUse),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.inviteLinks }),
   });
 }

@@ -49,17 +49,21 @@ router.get("/links", requireAuth, requireAdmin, requireOrg, async (req, res) => 
 router.post("/links", requireAuth, requireAdmin, requireOrg, async (req, res) => {
   const user = (req as any).user;
   const org = (req as any).org;
-  const { role = "user", expiresInDays } = req.body;
+  const { role = "user", expiresInDays, singleUse = true } = req.body;
 
   if (!["user", "admin"].includes(role))
     return res.status(400).json({ message: "Invalid role" });
 
-  const expiresAt = expiresInDays
-    ? Date.now() + Number(expiresInDays) * 24 * 60 * 60 * 1000
-    : null;
+  let expiresAt: number | null = null;
+  if (!singleUse) {
+    // General links auto-expire in 6 hours
+    expiresAt = Date.now() + 6 * 60 * 60 * 1000;
+  } else if (expiresInDays) {
+    expiresAt = Date.now() + Number(expiresInDays) * 24 * 60 * 60 * 1000;
+  }
 
   try {
-    const link = await createInviteLink({ organizationId: org.id, role, invitedBy: user.id, expiresAt });
+    const link = await createInviteLink({ organizationId: org.id, role, invitedBy: user.id, expiresAt, singleUse });
     res.status(201).json(link);
   } catch (e: any) {
     res.status(500).json({ message: e.message });
@@ -83,7 +87,7 @@ router.get("/join/:token", async (req, res) => {
   try {
     const link = await getInviteLink(req.params.token);
     if (!link) return res.status(404).json({ message: "Invite link not found or already used" });
-    if (link.usedAt) return res.status(410).json({ message: "This invite link has already been used" });
+    if (link.singleUse && link.usedAt) return res.status(410).json({ message: "This invite link has already been used" });
     if (link.expiresAt && link.expiresAt < Date.now())
       return res.status(410).json({ message: "This invite link has expired" });
 
@@ -108,7 +112,7 @@ router.post("/join/:token", async (req, res) => {
   try {
     const link = await getInviteLink(req.params.token);
     if (!link) return res.status(404).json({ message: "Invite link not found" });
-    if (link.usedAt) return res.status(410).json({ message: "This invite link has already been used" });
+    if (link.singleUse && link.usedAt) return res.status(410).json({ message: "This invite link has already been used" });
     if (link.expiresAt && link.expiresAt < Date.now())
       return res.status(410).json({ message: "This invite link has expired" });
 
@@ -131,8 +135,10 @@ router.post("/join/:token", async (req, res) => {
       return res.status(400).json({ message: error.message });
     }
 
-    // Mark the link as used
-    await markInviteLinkUsed(req.params.token, email);
+    // Only mark single-use links as used
+    if (link.singleUse) {
+      await markInviteLinkUsed(req.params.token, email);
+    }
 
     res.status(201).json({ success: true, userId: data.user?.id });
   } catch (e: any) {

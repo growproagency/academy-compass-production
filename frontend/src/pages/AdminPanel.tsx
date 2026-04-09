@@ -177,6 +177,7 @@ export default function AdminPanel() {
 
   // ── Invite Links ───────────────────────────────────────────────────────────
   const [inviteRole, setInviteRole] = useState<"user" | "admin">("user");
+  const [inviteSingleUse, setInviteSingleUse] = useState(true);
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const { data: inviteLinks } = useInviteLinks();
@@ -184,7 +185,7 @@ export default function AdminPanel() {
   const deleteInviteLink = useDeleteInviteLink();
 
   const handleGenerateLink = () => {
-    createInviteLink.mutate({ role: inviteRole }, {
+    createInviteLink.mutate({ role: inviteRole, singleUse: inviteSingleUse }, {
       onSuccess: (data: any) => {
         const url = `${window.location.origin}/invite/${data.token}`;
         setGeneratedLink(url);
@@ -287,6 +288,15 @@ export default function AdminPanel() {
                 <SelectItem value="admin">Admin</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={inviteSingleUse ? "single" : "general"} onValueChange={v => setInviteSingleUse(v === "single")}>
+              <SelectTrigger className="w-52 h-9 text-sm bg-secondary border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="single">One-time link</SelectItem>
+                <SelectItem value="general">General link (6hr expiry)</SelectItem>
+              </SelectContent>
+            </Select>
             <Button
               size="sm"
               className="gap-1.5 h-9"
@@ -327,6 +337,9 @@ export default function AdminPanel() {
                       <span className="truncate font-mono text-xs text-muted-foreground">{link.token}</span>
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
                         {link.role === "admin" ? "Admin" : "Member"}
+                      </Badge>
+                      <Badge variant={link.singleUse === false ? "secondary" : "outline"} className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+                        {link.singleUse === false ? "General" : "One-time"}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
