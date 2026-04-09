@@ -249,8 +249,8 @@ export const api = {
     // Invite links (no email required)
     links: {
       list: () => get("/invites/links"),
-      create: (role: "user" | "admin", expiresInDays?: number) =>
-        post("/invites/links", { role, expiresInDays }),
+      create: (role: "user" | "admin", singleUse = true) =>
+        post("/invites/links", { role, singleUse }),
       delete: (id: number) => del(`/invites/links/${id}`),
     },
     // Public — no auth header needed
