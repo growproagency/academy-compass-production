@@ -25,6 +25,7 @@ export const QK = {
   project: (id: number) => ["projects", id] as const,
   projectMembers: (id: number) => ["projects", id, "members"] as const,
   tasks: ["tasks"] as const,
+  tasksPaginated: (page: number, limit: number) => ["tasks", "paginated", page, limit] as const,
   task: (id: number) => ["tasks", id] as const,
   tasksByProject: (pid: number) => ["tasks", "project", pid] as const,
   calendarTasks: ["tasks", "calendar"] as const,
@@ -145,11 +146,11 @@ export function useCreateProject() {
     onSuccess: (newProject: any) => {
       // Immediately add the new project to both caches so the UI updates without waiting for a refetch
       qc.setQueryData(QK.projects, (old: unknown) =>
-        Array.isArray(old) ? [...old, newProject] : old
+        Array.isArray(old) ? [newProject, ...old] : old
       );
       qc.setQueryData(QK.projectsWithStats, (old: unknown) =>
         Array.isArray(old)
-          ? [...old, { ...newProject, taskTotal: 0, taskDone: 0, milestoneTotal: 0, milestoneDone: 0, milestonePreview: [] }]
+          ? [{ ...newProject, taskTotal: 0, taskDone: 0, milestoneTotal: 0, milestoneDone: 0, milestonePreview: [] }, ...old]
           : old
       );
       // Background refetch for eventual consistency
@@ -198,13 +199,22 @@ export function useDeleteProject() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.projects.delete(id),
-    onSuccess: (_d, id) => {
-      // Immediately remove the deleted project from both caches
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: QK.projects });
+      await qc.cancelQueries({ queryKey: QK.projectsWithStats });
+      const prevProjects = qc.getQueryData(QK.projects);
+      const prevStats = qc.getQueryData(QK.projectsWithStats);
       const filter = (old: unknown) =>
         Array.isArray(old) ? old.filter((p: Record<string, unknown>) => p.id !== id) : old;
       qc.setQueryData(QK.projects, filter);
       qc.setQueryData(QK.projectsWithStats, filter);
-      // Background refetch for eventual consistency
+      return { prevProjects, prevStats };
+    },
+    onError: (_e, _id, ctx: any) => {
+      if (ctx?.prevProjects) qc.setQueryData(QK.projects, ctx.prevProjects);
+      if (ctx?.prevStats) qc.setQueryData(QK.projectsWithStats, ctx.prevStats);
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: QK.projects });
       qc.invalidateQueries({ queryKey: QK.projectsWithStats });
     },
@@ -225,13 +235,32 @@ export function useRemoveProjectMember() {
   return useMutation({
     mutationFn: ({ projectId, userId }: { projectId: number; userId: number }) =>
       api.projects.members.remove(projectId, userId),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: QK.projectMembers(v.projectId) }),
+    onMutate: async ({ projectId, userId }) => {
+      await qc.cancelQueries({ queryKey: QK.projectMembers(projectId) });
+      const previous = qc.getQueryData(QK.projectMembers(projectId));
+      qc.setQueryData(QK.projectMembers(projectId), (old: any[]) =>
+        (old ?? []).filter((m: any) => m.userId !== userId)
+      );
+      return { previous };
+    },
+    onError: (_e, v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.projectMembers(v.projectId), ctx.previous);
+    },
+    onSettled: (_d, _e, v) => qc.invalidateQueries({ queryKey: QK.projectMembers(v.projectId) }),
   });
 }
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 export function useTasks() {
   return useQuery({ queryKey: QK.tasks, queryFn: () => api.tasks.listAll() });
+}
+
+export function useTasksPaginated(page: number, limit = 20) {
+  return useQuery({
+    queryKey: QK.tasksPaginated(page, limit),
+    queryFn: () => api.tasks.listPaginated(page, limit),
+    placeholderData: (prev: any) => prev,
+  });
 }
 
 export function useTasksByProject(projectId: number) {
@@ -408,7 +437,27 @@ export function useCreateSubtask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ taskId, title }: { taskId: number; title: string }) => api.subtasks.create(taskId, title),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: QK.subtasks(v.taskId) }),
+    onMutate: async ({ taskId, title }) => {
+      await qc.cancelQueries({ queryKey: QK.subtasks(taskId) });
+      const previous = qc.getQueryData(QK.subtasks(taskId));
+      qc.setQueryData(QK.subtasks(taskId), (old: any[]) =>
+        [...(old ?? []), { id: -Date.now(), taskId, title, completed: false, position: (old ?? []).length, createdAt: new Date().toISOString() }]
+      );
+      // Patch task card subtask count instantly
+      qc.setQueryData(QK.tasks, (old: any) =>
+        Array.isArray(old) ? old.map((t: any) => t.id !== taskId ? t : {
+          ...t, subtaskTotal: (t.subtaskTotal ?? 0) + 1,
+        }) : old
+      );
+      return { previous };
+    },
+    onError: (_e, v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.subtasks(v.taskId), ctx.previous);
+    },
+    onSettled: (_d, _e, v) => {
+      qc.invalidateQueries({ queryKey: QK.subtasks(v.taskId) });
+      qc.invalidateQueries({ queryKey: QK.tasks });
+    },
   });
 }
 
@@ -423,12 +472,22 @@ export function useToggleSubtask() {
       qc.setQueryData(QK.subtasks(taskId), (old: any[]) =>
         (old ?? []).map((s) => s.id === id ? { ...s, completed } : s)
       );
+      // Patch task card subtask done count instantly
+      const delta = completed ? 1 : -1;
+      qc.setQueryData(QK.tasks, (old: any) =>
+        Array.isArray(old) ? old.map((t: any) => t.id !== taskId ? t : {
+          ...t, subtaskDone: Math.max(0, (t.subtaskDone ?? 0) + delta),
+        }) : old
+      );
       return { previous };
     },
     onError: (_e, v, ctx: any) => {
       if (ctx?.previous) qc.setQueryData(QK.subtasks(v.taskId), ctx.previous);
     },
-    onSettled: (_d, _e, v) => qc.invalidateQueries({ queryKey: QK.subtasks(v.taskId) }),
+    onSettled: (_d, _e, v) => {
+      qc.invalidateQueries({ queryKey: QK.subtasks(v.taskId) });
+      qc.invalidateQueries({ queryKey: QK.tasks });
+    },
   });
 }
 
@@ -436,7 +495,30 @@ export function useDeleteSubtask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, taskId }: { id: number; taskId: number }) => api.subtasks.delete(id),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: QK.subtasks(v.taskId) }),
+    onMutate: async ({ id, taskId }) => {
+      await qc.cancelQueries({ queryKey: QK.subtasks(taskId) });
+      const previous = qc.getQueryData(QK.subtasks(taskId));
+      const deleted = (previous as any[] ?? []).find((s: any) => s.id === id);
+      qc.setQueryData(QK.subtasks(taskId), (old: any[]) =>
+        (old ?? []).filter((s) => s.id !== id)
+      );
+      // Patch task card subtask counts instantly
+      qc.setQueryData(QK.tasks, (old: any) =>
+        Array.isArray(old) ? old.map((t: any) => t.id !== taskId ? t : {
+          ...t,
+          subtaskTotal: Math.max(0, (t.subtaskTotal ?? 0) - 1),
+          subtaskDone: deleted?.completed ? Math.max(0, (t.subtaskDone ?? 0) - 1) : t.subtaskDone,
+        }) : old
+      );
+      return { previous };
+    },
+    onError: (_e, v, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.subtasks(v.taskId), ctx.previous);
+    },
+    onSettled: (_d, _e, v) => {
+      qc.invalidateQueries({ queryKey: QK.subtasks(v.taskId) });
+      qc.invalidateQueries({ queryKey: QK.tasks });
+    },
   });
 }
 
@@ -724,7 +806,18 @@ export function useDeleteAnnouncement() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.announcements.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: QK.announcements }),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: QK.announcements });
+      const previous = qc.getQueryData(QK.announcements);
+      qc.setQueryData(QK.announcements, (old: any) =>
+        Array.isArray(old) ? old.filter((a: any) => a.id !== id) : old
+      );
+      return { previous };
+    },
+    onError: (_e, _id, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(QK.announcements, ctx.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: QK.announcements }),
   });
 }
 

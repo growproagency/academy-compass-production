@@ -137,6 +137,8 @@ export const api = {
     listByProject: (projectId: number) =>
       get(`/tasks?projectId=${projectId}`),
     listAll: () => get("/tasks"),
+    listPaginated: (page: number, limit: number) =>
+      get<{ data: any[]; total: number; page: number; limit: number }>(`/tasks?page=${page}&limit=${limit}`),
     listForCalendar: () => get("/tasks?calendar=true"),
     listArchived: () => get("/tasks?archived=true"),
     search: (query: string) => get(`/tasks/search?q=${encodeURIComponent(query)}`),

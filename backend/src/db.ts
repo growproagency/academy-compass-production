@@ -31,7 +31,9 @@ import type {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toDate(val: string | null | undefined): Date {
-  return val ? new Date(val) : new Date();
+  if (!val) return new Date();
+  if (!val.endsWith("Z") && !val.includes("+")) return new Date(val + "Z");
+  return new Date(val);
 }
 
 function mapOrg(row: Record<string, unknown>): Organization {
@@ -450,6 +452,28 @@ export async function listAllTasks(userId: number, isAdmin: boolean, orgId: numb
   return (data ?? []).map((r: Record<string, unknown>) => mapTask(r));
 }
 
+export async function listTasksPaginated(
+  userId: number, isAdmin: boolean, orgId: number, page: number, limit: number
+): Promise<{ data: Task[]; total: number }> {
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  let query = supabase
+    .from("tasks")
+    .select("*", { count: "exact" })
+    .eq("organizationId", orgId)
+    .is("archivedAt", null)
+    .order("sortOrder", { ascending: true })
+    .range(from, to);
+
+  if (!isAdmin) {
+    query = query.or(`creatorId.eq.${userId},assigneeId.eq.${userId}`);
+  }
+
+  const { data, count } = await query;
+  return { data: (data ?? []).map((r: Record<string, unknown>) => mapTask(r)), total: count ?? 0 };
+}
+
 export async function listArchivedTasks(userId: number, isAdmin: boolean, orgId: number): Promise<Task[]> {
   if (isAdmin) {
     const { data } = await supabase
@@ -667,16 +691,30 @@ export async function getDashboardStats(userId: number, isAdmin: boolean, orgId:
   overdueTasks: number;
   totalProjects: number;
 }> {
-  const allTasks = await listAllTasks(userId, isAdmin, orgId);
   const now = Date.now();
+
+  // Single RPC call for all 4 task counts
+  const [taskStatsRes, projectCount] = await Promise.all([
+    supabase.rpc("get_task_stats", {
+      p_org_id: orgId,
+      p_user_id: userId,
+      p_is_admin: isAdmin,
+      p_now: now,
+    }),
+    isAdmin
+      ? supabase.from("projects").select("*", { count: "exact", head: true }).eq("organizationId", orgId)
+      : listProjectsForUser(userId, orgId),
+  ]);
+
+  const stats = taskStatsRes.data ?? { totalTasks: 0, doneTasks: 0, inProgressTasks: 0, overdueTasks: 0 };
+  const totalProjects = isAdmin ? ((projectCount as any).count ?? 0) : (projectCount as any[]).length;
+
   return {
-    totalTasks: allTasks.length,
-    doneTasks: allTasks.filter((t) => t.status === "done").length,
-    inProgressTasks: allTasks.filter((t) => t.status === "in_progress").length,
-    overdueTasks: allTasks.filter((t) => t.status !== "done" && t.dueDate && t.dueDate < now).length,
-    totalProjects: isAdmin
-      ? (await listAllProjects(orgId)).length
-      : (await listProjectsForUser(userId, orgId)).length,
+    totalTasks: stats.totalTasks ?? 0,
+    doneTasks: stats.doneTasks ?? 0,
+    inProgressTasks: stats.inProgressTasks ?? 0,
+    overdueTasks: stats.overdueTasks ?? 0,
+    totalProjects,
   };
 }
 

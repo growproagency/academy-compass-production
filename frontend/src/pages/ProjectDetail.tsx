@@ -288,11 +288,15 @@ export default function ProjectDetail() {
 
   const handleAddComment = () => {
     if (!commentText.trim()) return;
+    const content = commentText.trim();
+    setCommentText("");
     addComment.mutate(
-      { projectId, content: commentText.trim() },
+      { projectId, content },
       {
-        onSuccess: () => setCommentText(""),
-        onError: (e: any) => toast.error(e.message),
+        onError: (e: any) => {
+          setCommentText(content);
+          toast.error(e.message);
+        },
       }
     );
   };

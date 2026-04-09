@@ -170,7 +170,7 @@ export default function Dashboard() {
   const projectMap = new Map((projectsWithStats ?? []).map((p: any) => [p.id, p.name]));
   const userMap = new Map((users ?? []).map((u: any) => [u.id, u.name]));
 
-  // Derive stats locally from allTasks — no extra round-trip needed
+  // Derive stats locally from allTasks — instant, no extra round-trip
   const now = Date.now();
   const stats = allTasks ? {
     totalTasks: allTasks.length,
